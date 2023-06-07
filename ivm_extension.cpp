@@ -65,7 +65,7 @@ DUCKDB_EXTENSION_API void ivm_init(duckdb::DatabaseInstance &db) {
 	LoadInternal(db);
 }
 
-DUCKDB_EXTENSION_API const char *server_version() {
+DUCKDB_EXTENSION_API const char *ivm_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
 }
