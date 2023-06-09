@@ -14,13 +14,31 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	StringUtil::Trim(query_lower);
 
 	// each instruction set gets saved to a file, for portability
-	string parser_query;  // the SQL-compliant query to be fed to the parser
+	// string parser_query;  // the SQL-compliant query to be fed to the parser
 
-	if (!StringUtil::Contains(query_lower, "immv")) {
+	if (!StringUtil::Contains(query_lower, "create immv as")) {
 		return ParserExtensionParseResult();
 	}
 
-	return ParserExtensionParseResult("This is working successfully!!!!");
+//	Connection con(db_ref);
+
+	auto parser_query = StringUtil::Replace(query_lower, "create immv as", "");
+	printf("parser query: %s \n", parser_query.c_str());
+
+	Parser parser;
+	parser.ParseQuery(parser_query);
+	printf("Parsed statement\n");
+
+	int l = parser.statements.size();
+	for (int i=0;i<l;i++) {
+		printf("S%d: %s\n", i+1, parser.statements[i]->ToString().c_str());
+	}
+
+	vector<unique_ptr<SQLStatement>> statements = std::move(parser.statements);
+
+	return ParserExtensionParseResult(
+	    make_uniq_base<ParserExtensionParseData, IVMParseData>(
+	        std::move(statements[0])));
 
 
 //	if (query_lower.substr(0, 6) == "create") {
@@ -66,5 +84,17 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 //	} else {
 //		// whatever
 //	}
+}
+
+ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
+                                                              unique_ptr<ParserExtensionParseData> parse_data) {
+	printf("Plan function working: \n");
+	return ParserExtensionPlanResult();
+}
+
+BoundStatement IVMBind(ClientContext &context, Binder &binder,
+                         OperatorExtensionInfo *info, SQLStatement &statement) {
+	printf("In ivm bind function\n");
+	return BoundStatement();
 }
 }; // namespace duckdb

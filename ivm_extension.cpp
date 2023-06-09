@@ -43,7 +43,8 @@ static void LoadInternal(DatabaseInstance &instance) {
 	// add a parser extension
 	// will probably break, let's see
 	auto &db_config = duckdb::DBConfig::GetConfig(instance);
-	auto ivm_parser = duckdb::IVMParserExtension();
+	Connection con(instance);
+	auto ivm_parser = duckdb::IVMParserExtension(&con);
 	// rdda_parser.path = config["db_path"] + config["db_name"];
 
 	db_config.parser_extensions.push_back(ivm_parser);
