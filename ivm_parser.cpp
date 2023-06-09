@@ -89,6 +89,14 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
                                                               unique_ptr<ParserExtensionParseData> parse_data) {
 	printf("Plan function working: \n");
+	auto &quack_data = dynamic_cast<IVMParseData &>(*parse_data);
+
+	ParserExtensionPlanResult result;
+	result.function = IVMFunction();
+	result.parameters.push_back(Value::BIGINT(2));
+	result.requires_valid_transaction = false;
+	result.return_type = StatementReturnType::QUERY_RESULT;
+	return result;
 	return ParserExtensionPlanResult();
 }
 

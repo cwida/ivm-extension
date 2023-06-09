@@ -65,6 +65,47 @@ public:
 	unique_ptr<ParserExtensionParseData> parse_data;
 };
 
+class IVMFunction : public TableFunction {
+public:
+	IVMFunction() {
+		name = "quack";
+		arguments.push_back(LogicalType::BIGINT);
+		bind = IVMBind;
+		init_global = IVMInit;
+		function = IVMFunc;
+	}
+
+	struct IVMBindData : public TableFunctionData {
+		IVMBindData(idx_t number_of_quacks) : number_of_quacks(number_of_quacks) {
+		}
+
+		idx_t number_of_quacks;
+	};
+
+	struct IVMGlobalData : public GlobalTableFunctionState {
+		IVMGlobalData() : offset(0) {
+		}
+
+		idx_t offset;
+	};
+
+	static duckdb::unique_ptr<FunctionData> IVMBind(ClientContext &context, TableFunctionBindInput &input,
+	                                                  vector<LogicalType> &return_types, vector<string> &names) {
+		names.emplace_back("quack");
+		return_types.emplace_back(LogicalType::VARCHAR);
+		return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
+	}
+
+	static duckdb::unique_ptr<GlobalTableFunctionState> IVMInit(ClientContext &context,
+	                                                              TableFunctionInitInput &input) {
+		return make_uniq<IVMGlobalData>();
+	}
+
+	static void IVMFunc(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+		printf("Inside IVMFunc of Table function class\n");
+	}
+};
+
 } // namespace duckdb
 
 #endif // DUCKDB_IVM_PARSER_HPP
