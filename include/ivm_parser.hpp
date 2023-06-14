@@ -10,6 +10,7 @@ namespace duckdb {
 struct IVMInfo : ParserExtensionInfo {
 	unique_ptr<Connection> db_conn;
 	explicit IVMInfo(unique_ptr<Connection> db_conn) : db_conn(std::move(db_conn)) {}
+
 };
 
 class IVMParserExtension : public ParserExtension {
@@ -68,7 +69,7 @@ public:
 class IVMFunction : public TableFunction {
 public:
 	IVMFunction() {
-		name = "quack";
+		name = "quack quack";
 		arguments.push_back(LogicalType::BIGINT);
 		bind = IVMBind;
 		init_global = IVMInit;
@@ -91,7 +92,8 @@ public:
 
 	static duckdb::unique_ptr<FunctionData> IVMBind(ClientContext &context, TableFunctionBindInput &input,
 	                                                  vector<LogicalType> &return_types, vector<string> &names) {
-		names.emplace_back("quack");
+		printf("Inside IVMBind of Table function class\n");
+		names.emplace_back("quack-a-dooo");
 		return_types.emplace_back(LogicalType::VARCHAR);
 		return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
 	}
