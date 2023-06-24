@@ -120,6 +120,15 @@ static duckdb::unique_ptr<FunctionData> DbgenBind(ClientContext &context, TableF
 
 static void DbgenFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 	printf("In DBgenFunction");
+	auto &data = dynamic_cast<IVMData &>(*data_p.global_state);
+	if (data.offset >= 1) {
+		// finished returning values
+		return;
+	}
+	output.SetValue(0, 0, true);
+	output.SetValue(1, 0, 10000);
+	output.SetCardinality(1);
+	data.offset = data.offset+1;
 	return;
 }
 
@@ -136,7 +145,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	auto ivm_func = PragmaFunction::PragmaCall("DoIVM", PragmaIVMFunction, {LogicalType::VARCHAR});
 	ExtensionUtil::RegisterFunction(instance, ivm_func);
 
-	TableFunction ivm_func2("PerformIVM", {LogicalType::VARCHAR}, DbgenFunction, DbgenBind);
+	TableFunction ivm_func2("PerformIVM", {LogicalType::VARCHAR}, DbgenFunction, DbgenBind, IVMInit);
 	con.BeginTransaction();
 	auto &catalog = Catalog::GetSystemCatalog(*con.context);
 	ivm_func2.bind_replace = reinterpret_cast<table_function_bind_replace_t>(Hello);
