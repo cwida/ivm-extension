@@ -1,6 +1,9 @@
 #include "duckdb.hpp"
 #include "ivm_parser_helpers.hpp"
 
+#include "duckdb/main/extension_util.hpp"
+#include "duckdb/function/pragma_function.hpp"
+
 #ifndef DUCKDB_IVM_PARSER_HPP
 #define DUCKDB_IVM_PARSER_HPP
 
@@ -28,6 +31,7 @@ public:
 
 };
 
+static void PragmaIVMFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder,
                        OperatorExtensionInfo *info, SQLStatement &statement);

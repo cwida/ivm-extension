@@ -140,6 +140,7 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	printf("Trying to create plan by using plan cpp api: \n%s\n", planner.plan->ToString().c_str());
 
 	printf("Node 0: %s", LogicalOperatorToString(planner.plan->type).c_str());
+	auto t = planner.plan.get();
 
 	printf("children: ");
 	for (int i = 0; i<planner.plan->children.size();i++) {
