@@ -92,11 +92,42 @@ static void IVMQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 }
 
 static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput &input) {
-	printf("Hello!");
+	printf("Hello!\n");
+
+	// PerformIVM('..'), where ... contains the name of the view
+	// we want to process incremental updates on.
+	// For now, we will hard-code it is 'test'
+	string view_name = "test";
+
+	// Pre-requisite: the view mention should exist
+	// If it exists, check if corresponding materialized view, delta view, delta table present
+	// If not, create
 
 	auto &catalog = Catalog::GetSystemCatalog(context);
 	OnEntryNotFound if_not_found;
 	QueryErrorContext error_context = QueryErrorContext();
+
+	// check if 'duckdb_ivm_materialized_sample_view' present
+	string materialized_view = "duckdb_ivm_materialized_" + view_name;
+	auto mv_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
+	                          "main", materialized_view, if_not_found, error_context);
+	// TODO check if mv does not exist
+
+	// check if 'duckdb_ivm_delta_sample_view' present
+	string delta_view = "duckdb_ivm_delta_" + view_name;
+	auto dv_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
+	                                 "main", delta_view, if_not_found, error_context);
+	// TODO check if dv does not exist
+
+	// obtain view defintion
+	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
+	                                "main", view_name, if_not_found, error_context);
+	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
+	auto view_base_query = std::move(view_entry->query);
+
+	
+
+
 	auto t = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
 	                          "main", "hello", if_not_found, error_context);
 	printf("\nTable entry: %s %hhu %s\n", t.get()->name.c_str(), t.get()->type, t.get()->ToSQL().c_str());
