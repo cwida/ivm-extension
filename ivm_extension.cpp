@@ -17,6 +17,10 @@
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/function/pragma_function.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
+#include "duckdb/parser/tableref/basetableref.hpp"
+#include "duckdb/common/enums/catalog_type.hpp"
+#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+#include "duckdb/parser/query_error_context.hpp"
 
 #include <fcntl.h>
 #include <fstream>
@@ -90,7 +94,53 @@ static void IVMQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput &input) {
 	printf("Hello!");
 
-	return nullptr;
+	auto &catalog = Catalog::GetSystemCatalog(context);
+	OnEntryNotFound if_not_found;
+	QueryErrorContext error_context = QueryErrorContext();
+	auto t = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
+	                          "main", "hello", if_not_found, error_context);
+	printf("\nTable entry: %s %hhu %s\n", t.get()->name.c_str(), t.get()->type, t.get()->ToSQL().c_str());
+	auto v = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
+	                                            "main", "test", if_not_found, error_context);
+	auto view = dynamic_cast<ViewCatalogEntry*>(v.get());
+	printf("View entry: %s %hhu %s\n", view->name.c_str(), view->type, view->ToSQL().c_str());
+	printf("View base query: %s\n", view->query->ToString().c_str());
+
+	string s = "SELECT * FROM hello";
+	Parser parser;
+	parser.ParseQuery(s);
+
+	auto statement = parser.statements[0].get();
+	Planner planner(context);
+	planner.CreatePlan(statement->Copy());
+
+	printf("\nPlan: %s\n", planner.plan->ToString().c_str());
+
+	auto table_ref = make_uniq<BaseTableRef>();
+	table_ref->table_name = "bellow";
+
+	unique_ptr<TableRef> from_clause = std::move(table_ref);
+
+	auto b = planner.binder;
+
+	Optimizer o((Binder&)b, context);
+	auto p = o.Optimize(std::move(planner.plan));
+
+	printf("\nOptimized plan: %s\n", p->ToString().c_str());
+
+	auto table_ref2 = make_uniq<BaseTableRef>();
+	table_ref2->table_name = "hello";
+	unique_ptr<TableRef> from_clause2 = std::move(table_ref2);
+//
+//	select_node->from_table = std::move(from_clause);
+//
+//	auto subquery = make_uniq<SelectStatement>();
+//	subquery->node = std::move(select_node);
+//
+//	auto result = make_uniq<SubqueryRef>(std::move(subquery), ref->alias);
+//	return result;
+
+	return from_clause2;
 }
 
 struct DBGenFunctionData : public TableFunctionData {
@@ -167,10 +217,6 @@ static void LoadInternal(DatabaseInstance &instance) {
 	CreateTableFunctionInfo ivm_test_func_info(ivm_test_func);
 	catalog.CreateTableFunction(*con.context, &ivm_test_func_info);
 	con.Commit();
-
-
-
-
 }
 
 void IVMExtension::Load(DuckDB &db) {
