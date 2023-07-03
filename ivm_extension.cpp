@@ -21,6 +21,7 @@
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/parser/query_error_context.hpp"
+#include "duckdb/parser/query_node/select_node.hpp"
 
 #include <fcntl.h>
 #include <fstream>
@@ -91,6 +92,51 @@ static void IVMQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 	output.SetCardinality(chunk_count);
 }
 
+unique_ptr<LogicalOperator, std::default_delete<LogicalOperator>, true> GetOptimizedPlan(ClientContext &context, string table) {
+	string sql = "SELECT * FROM delta_" + table;
+
+	Parser parser;
+	parser.ParseQuery(sql);
+	auto statement = parser.statements[0].get();
+	Planner planner(context);
+	planner.CreatePlan(statement->Copy());
+
+	printf("Plan for delta table: %s\n", planner.plan->ToString().c_str());
+
+	Optimizer optimizer((Binder&)planner.binder, context);
+	auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
+
+	return optimized_plan;
+}
+
+void SubstituteWithDeltaTables(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
+
+	auto children = std::move(plan->children);
+
+	int children_size = children.size();
+	for (int c=0;c<children_size;c++) {
+		auto child = std::move(children[c]);
+		printf("Child type: %s ", LogicalOperatorToString(child->type).c_str());
+		if (child->type == LogicalOperatorType::LOGICAL_GET) {
+			// TODO Will get/seq scan be a single table?
+			printf("Name: %s \n", child->ParamsToString().c_str());
+			// get optimized plan for the table
+			auto delta_plan = GetOptimizedPlan(context, child->ParamsToString().c_str());
+			printf("Delta plan: %s \n", delta_plan->ToString().c_str());
+			printf("Before: %s \n", child->ToString().c_str());
+			child = std::move(delta_plan->children[0]);
+			printf("After: %s \n", child->ToString().c_str());
+		}
+//		if (children[c]->children.empty()) {
+//			continue;
+//		}
+		// auto x = static_cast<unique_ptr<LogicalOperator>>(children[c].get());
+		// SubstituteWithDeltaTables(x);
+	}
+	printf("Changed optimized plan: %s %lu\n", plan->ToString().c_str(), plan->children.size());
+	printf("\n");
+}
+
 static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput &input) {
 	printf("Hello!\n");
 
@@ -122,46 +168,56 @@ static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput
 	// obtain view defintion
 	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
 	                                "main", view_name, if_not_found, error_context);
+	// TODO check if view itself does not exist
 	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 	auto view_base_query = std::move(view_entry->query);
 
-	
-
-
-	auto t = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
-	                          "main", "hello", if_not_found, error_context);
-	printf("\nTable entry: %s %hhu %s\n", t.get()->name.c_str(), t.get()->type, t.get()->ToSQL().c_str());
-	auto v = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
-	                                            "main", "test", if_not_found, error_context);
-	auto view = dynamic_cast<ViewCatalogEntry*>(v.get());
-	printf("View entry: %s %hhu %s\n", view->name.c_str(), view->type, view->ToSQL().c_str());
-	printf("View base query: %s\n", view->query->ToString().c_str());
-
-	string s = "SELECT * FROM hello";
+	// Pass the view_base_query through the optimizer to obtain a simple plan
+	string view_base_sql = view_base_query->ToString();
 	Parser parser;
-	parser.ParseQuery(s);
-
+	parser.ParseQuery(view_base_sql);
 	auto statement = parser.statements[0].get();
 	Planner planner(context);
 	planner.CreatePlan(statement->Copy());
 
-	printf("\nPlan: %s\n", planner.plan->ToString().c_str());
+	printf("Plan: %s\n", planner.plan->ToString().c_str());
 
-	auto table_ref = make_uniq<BaseTableRef>();
-	table_ref->table_name = "bellow";
+	Optimizer optimizer((Binder&)planner.binder, context);
+	auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
 
-	unique_ptr<TableRef> from_clause = std::move(table_ref);
+	printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
 
-	auto b = planner.binder;
+	// recurse over the optimized plan
+	auto plan = std::move(optimized_plan);
+	SubstituteWithDeltaTables(context, plan);
 
-	Optimizer o((Binder&)b, context);
-	auto p = o.Optimize(std::move(planner.plan));
 
-	printf("\nOptimized plan: %s\n", p->ToString().c_str());
+	auto select_node = dynamic_cast<SelectNode*>(view_base_query->node.get());
+	auto table_ref = select_node->from_table.get();
 
-	auto table_ref2 = make_uniq<BaseTableRef>();
-	table_ref2->table_name = "hello";
-	unique_ptr<TableRef> from_clause2 = std::move(table_ref2);
+	table_ref->Print();
+
+	printf("Table ref: %s\n", table_ref->ToString().c_str());
+
+
+//	auto t = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
+//	                          "main", "hello", if_not_found, error_context);
+//	printf("\nTable entry: %s %hhu %s\n", t.get()->name.c_str(), t.get()->type, t.get()->ToSQL().c_str());
+//	auto v = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
+//	                                            "main", "test", if_not_found, error_context);
+//	auto view = dynamic_cast<ViewCatalogEntry*>(v.get());
+//	printf("View entry: %s %hhu %s\n", view->name.c_str(), view->type, view->ToSQL().c_str());
+//	printf("View base query: %s\n", view->query->ToString().c_str());
+
+
+//	auto table_ref = make_uniq<BaseTableRef>();
+//	table_ref->table_name = "bellow";
+//
+//	unique_ptr<TableRef> from_clause = std::move(table_ref);
+//
+//	auto table_ref2 = make_uniq<BaseTableRef>();
+//	table_ref2->table_name = "hello";
+//	unique_ptr<TableRef> from_clause2 = std::move(table_ref2);
 //
 //	select_node->from_table = std::move(from_clause);
 //
@@ -171,7 +227,7 @@ static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput
 //	auto result = make_uniq<SubqueryRef>(std::move(subquery), ref->alias);
 //	return result;
 
-	return from_clause2;
+	return nullptr;
 }
 
 struct DBGenFunctionData : public TableFunctionData {
