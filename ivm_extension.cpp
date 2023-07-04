@@ -93,23 +93,6 @@ static void IVMQueryFunction(ClientContext &context, TableFunctionInput &data_p,
 	output.SetCardinality(chunk_count);
 }
 
-unique_ptr<LogicalOperator, std::default_delete<LogicalOperator>, true> GetOptimizedPlan(ClientContext &context, string table) {
-	string sql = "SELECT * FROM delta_" + table;
-
-	Parser parser;
-	parser.ParseQuery(sql);
-	auto statement = parser.statements[0].get();
-	Planner planner(context);
-	planner.CreatePlan(statement->Copy());
-
-	printf("Plan for delta table: %s\n", planner.plan->ToString().c_str());
-
-	Optimizer optimizer((Binder&)planner.binder, context);
-	auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
-
-	return optimized_plan;
-}
-
 static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput &input) {
 	printf("Hello!\n");
 
@@ -158,30 +141,18 @@ static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput
 	new_select->from_table = std::move(from_clause2);
 	new_select->select_list = std::move(select_node->select_list);
 
-
-//	select_node->from_table = std::move(from_clause2);
-
 	printf("New select: %s \n", new_select->ToString().c_str());
 
-	auto subquery = make_uniq<SelectStatement>();
-	printf("Error here 1\n");
-	subquery->node = std::move(new_select);
-	printf("Error here 2\n");
-	auto result = make_uniq<SubqueryRef>(std::move(subquery), "subq");
-	printf("Error here 3\n");
-	unique_ptr<TableRef> result_table_ref = std::move(result);
-	printf("Error here 4\n");
-	return std::move(result_table_ref);
-
-//	auto t = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
-//	                          "main", "hello", if_not_found, error_context);
-//	printf("\nTable entry: %s %hhu %s\n", t.get()->name.c_str(), t.get()->type, t.get()->ToSQL().c_str());
-//	auto v = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
-//	                                            "main", "test", if_not_found, error_context);
-//	auto view = dynamic_cast<ViewCatalogEntry*>(v.get());
-//	printf("View entry: %s %hhu %s\n", view->name.c_str(), view->type, view->ToSQL().c_str());
-//	printf("View base query: %s\n", view->query->ToString().c_str());
-
+//	auto subquery = make_uniq<SelectStatement>();
+//	printf("Error here 1\n");
+//	subquery->node = std::move(new_select);
+//	printf("Error here 2\n");
+//	auto result = make_uniq<SubqueryRef>(std::move(subquery), "subq");
+//	printf("Error here 3\n");
+//	unique_ptr<TableRef> result_table_ref = std::move(result);
+//	printf("Error here 4\n");
+	// return std::move(result_table_ref);
+	return std::move(new_select->from_table);
 	return nullptr;
 }
 
@@ -236,6 +207,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	// create the IVM pragma that allows us to run the ivm functions
 	auto ivm_func = PragmaFunction::PragmaCall("DoIVM", PragmaIVMFunction, {LogicalType::VARCHAR});
 	ExtensionUtil::RegisterFunction(instance, ivm_func);
+
 
 	TableFunction ivm_func2("PerformIVM", {LogicalType::VARCHAR}, DbgenFunction, DbgenBind, IVMInit);
 	con.BeginTransaction();
