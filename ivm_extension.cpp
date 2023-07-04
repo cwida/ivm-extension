@@ -22,6 +22,7 @@
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/parser/query_error_context.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/tableref/subqueryref.hpp"
 
 #include <fcntl.h>
 #include <fstream>
@@ -109,34 +110,6 @@ unique_ptr<LogicalOperator, std::default_delete<LogicalOperator>, true> GetOptim
 	return optimized_plan;
 }
 
-void SubstituteWithDeltaTables(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
-
-	auto children = std::move(plan->children);
-
-	int children_size = children.size();
-	for (int c=0;c<children_size;c++) {
-		auto child = std::move(children[c]);
-		printf("Child type: %s ", LogicalOperatorToString(child->type).c_str());
-		if (child->type == LogicalOperatorType::LOGICAL_GET) {
-			// TODO Will get/seq scan be a single table?
-			printf("Name: %s \n", child->ParamsToString().c_str());
-			// get optimized plan for the table
-			auto delta_plan = GetOptimizedPlan(context, child->ParamsToString().c_str());
-			printf("Delta plan: %s \n", delta_plan->ToString().c_str());
-			printf("Before: %s \n", child->ToString().c_str());
-			child = std::move(delta_plan->children[0]);
-			printf("After: %s \n", child->ToString().c_str());
-		}
-//		if (children[c]->children.empty()) {
-//			continue;
-//		}
-		// auto x = static_cast<unique_ptr<LogicalOperator>>(children[c].get());
-		// SubstituteWithDeltaTables(x);
-	}
-	printf("Changed optimized plan: %s %lu\n", plan->ToString().c_str(), plan->children.size());
-	printf("\n");
-}
-
 static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput &input) {
 	printf("Hello!\n");
 
@@ -172,33 +145,33 @@ static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput
 	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 	auto view_base_query = std::move(view_entry->query);
 
-	// Pass the view_base_query through the optimizer to obtain a simple plan
-	string view_base_sql = view_base_query->ToString();
-	Parser parser;
-	parser.ParseQuery(view_base_sql);
-	auto statement = parser.statements[0].get();
-	Planner planner(context);
-	planner.CreatePlan(statement->Copy());
-
-	printf("Plan: %s\n", planner.plan->ToString().c_str());
-
-	Optimizer optimizer((Binder&)planner.binder, context);
-	auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
-
-	printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
-
-	// recurse over the optimized plan
-	auto plan = std::move(optimized_plan);
-	SubstituteWithDeltaTables(context, plan);
-
-
 	auto select_node = dynamic_cast<SelectNode*>(view_base_query->node.get());
 	auto table_ref = select_node->from_table.get();
 
-	table_ref->Print();
-
 	printf("Table ref: %s\n", table_ref->ToString().c_str());
 
+	auto table_ref2 = make_uniq<BaseTableRef>();
+	table_ref2->table_name = "delta_" + table_ref->ToString();
+	unique_ptr<TableRef> from_clause2 = std::move(table_ref2);
+
+	auto new_select = make_uniq<SelectNode>();
+	new_select->from_table = std::move(from_clause2);
+	new_select->select_list = std::move(select_node->select_list);
+
+
+//	select_node->from_table = std::move(from_clause2);
+
+	printf("New select: %s \n", new_select->ToString().c_str());
+
+	auto subquery = make_uniq<SelectStatement>();
+	printf("Error here 1\n");
+	subquery->node = std::move(new_select);
+	printf("Error here 2\n");
+	auto result = make_uniq<SubqueryRef>(std::move(subquery), "subq");
+	printf("Error here 3\n");
+	unique_ptr<TableRef> result_table_ref = std::move(result);
+	printf("Error here 4\n");
+	return std::move(result_table_ref);
 
 //	auto t = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
 //	                          "main", "hello", if_not_found, error_context);
@@ -208,24 +181,6 @@ static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput
 //	auto view = dynamic_cast<ViewCatalogEntry*>(v.get());
 //	printf("View entry: %s %hhu %s\n", view->name.c_str(), view->type, view->ToSQL().c_str());
 //	printf("View base query: %s\n", view->query->ToString().c_str());
-
-
-//	auto table_ref = make_uniq<BaseTableRef>();
-//	table_ref->table_name = "bellow";
-//
-//	unique_ptr<TableRef> from_clause = std::move(table_ref);
-//
-//	auto table_ref2 = make_uniq<BaseTableRef>();
-//	table_ref2->table_name = "hello";
-//	unique_ptr<TableRef> from_clause2 = std::move(table_ref2);
-//
-//	select_node->from_table = std::move(from_clause);
-//
-//	auto subquery = make_uniq<SelectStatement>();
-//	subquery->node = std::move(select_node);
-//
-//	auto result = make_uniq<SubqueryRef>(std::move(subquery), ref->alias);
-//	return result;
 
 	return nullptr;
 }
