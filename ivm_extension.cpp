@@ -143,17 +143,11 @@ static unique_ptr<TableRef> Hello(ClientContext &context, TableFunctionBindInput
 
 	printf("New select: %s \n", new_select->ToString().c_str());
 
-//	auto subquery = make_uniq<SelectStatement>();
-//	printf("Error here 1\n");
-//	subquery->node = std::move(new_select);
-//	printf("Error here 2\n");
-//	auto result = make_uniq<SubqueryRef>(std::move(subquery), "subq");
-//	printf("Error here 3\n");
-//	unique_ptr<TableRef> result_table_ref = std::move(result);
-//	printf("Error here 4\n");
-	// return std::move(result_table_ref);
-	return std::move(new_select->from_table);
-	return nullptr;
+	auto subquery = make_uniq<SelectStatement>();
+	subquery->node = std::move(new_select);
+	auto result = make_uniq<SubqueryRef>(std::move(subquery), "subq");
+	unique_ptr<TableRef> result_table_ref = std::move(result);
+	return std::move(result_table_ref);
 }
 
 struct DBGenFunctionData : public TableFunctionData {
