@@ -31,8 +31,6 @@ public:
 
 };
 
-static void PragmaIVMFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
-
 BoundStatement IVMBind(ClientContext &context, Binder &binder,
                        OperatorExtensionInfo *info, SQLStatement &statement);
 

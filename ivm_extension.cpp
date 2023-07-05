@@ -1,6 +1,7 @@
 #define DUCKDB_EXTENSION_MAIN
 
 #include "ivm-extension.hpp"
+#include "ivm_rewrite_rule.hpp"
 
 #include "duckdb/common/serializer/buffered_serializer.hpp"
 #include "duckdb/main/appender.hpp"
@@ -87,8 +88,10 @@ static void LoadInternal(DatabaseInstance &instance) {
 	auto &db_config = duckdb::DBConfig::GetConfig(instance);
 	Connection con(instance);
 	auto ivm_parser = duckdb::IVMParserExtension(&con);
+	auto ivm_rewrite_rule = duckdb::IVMRewriteRule();
 
 	db_config.parser_extensions.push_back(ivm_parser);
+	db_config.optimizer_extensions.push_back(ivm_rewrite_rule);
 
 	TableFunction ivm_func("DoIVM", {LogicalType::VARCHAR}, DoIVMFunction, DoIVMBind, DoIVMInit);
 	con.BeginTransaction();
