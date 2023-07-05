@@ -100,8 +100,6 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	printf("Node added: %s %s %s\n", x->ToString().c_str(), LogicalOperatorToString(x->type).c_str(),
 	       x->ParamsToString().c_str());
 
-
-
 	ParserExtensionPlanResult result;
 	result.function = IVMFunction();
 	result.parameters.push_back(Value::BIGINT(2));
