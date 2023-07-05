@@ -23,13 +23,6 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 		return ParserExtensionParseResult();
 	}
 
-	//TODO: IMV query checks, for ex scope limiting checks
-
-	//TODO: Return error if IMV exists
-
-//	Connection con(db_ref);
-
-
 	//TODO: Add support for proper table name using regex
 	auto parser_query = StringUtil::Replace(query_lower, "create immv as", "");
 	printf("parser query: %s \n", parser_query.c_str());
@@ -54,51 +47,6 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	return ParserExtensionParseResult(
 	    make_uniq_base<ParserExtensionParseData, IVMParseData>(
 	        std::move(statements[0])));
-
-
-//	if (query_lower.substr(0, 6) == "create") {
-//		// this is a CREATE statement
-//
-//		// check if this is a CREATE table or view
-//		if (query_lower.substr(0, 20) == "create materialized view") {
-//
-//			auto result = con.Query(query_lower);
-//			if (!result->HasError()) {// adding the view to the system tables
-//				auto view_name = ExtractViewName(query_lower);
-//				auto view_query = ExtractViewQuery(query_lower);
-//				// extracting the FROM and JOIN clause tables (not sure if you need this?)
-//				auto view_tables = ParseViewTables(query_lower);
-//
-//				con.BeginTransaction();  // wrapping in a transaction block so we can rollback
-//				auto result = con.Query(query_lower); // check for mistakes in the query
-//				con.Rollback(); // nothing happens
-//
-//				// now you got everything, we can parse the query
-//				if (!result->HasError()) {
-//
-//					Parser p;
-//					p.ParseQuery(view_query);
-//					printf("Parsed statement\n");
-//
-//					Planner planner(*con.context);
-//
-//					planner.CreatePlan(std::move(p.statements[0]));
-//					printf("Created plan\n");
-//					auto plan = std::move(planner.plan);
-//
-//					Optimizer optimizer(*planner.binder, *con.context);
-//					plan = optimizer.Optimize(std::move(plan));
-//
-//					// take it from here
-//				}
-//
-//			}
-//		} else if (query_lower.substr(0, 20) == "create view") {
-//			// todo throw an exception here
-//		}
-//	} else {
-//		// whatever
-//	}
 }
 
 ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
@@ -120,18 +68,11 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 			       ExpressionClassToString(select_node->select_list[i]->GetExpressionClass()).c_str());
 		}
 
-//
-//		auto group_by_clause = select_node->groups.group_expressions;
-//		printf("Group by expressions: ");
-//		for (int i = 0; i<group_by_clause.size();i++) {
-//			printf(", %s", group_by_clause.get());
-//		}
 
 		auto from_table_function = dynamic_cast<TableRef*>(select_node->from_table.get());
 		printf("\nFrom table func: %s \n", from_table_function->ToString().c_str());
 
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		// catalog.CreateTable(context, BoundCreateTableInfo())
 
 	}
 
