@@ -31,14 +31,17 @@ struct DoIVMData : public GlobalTableFunctionState {
 	DoIVMData() : offset(0) {
 	}
 	idx_t offset;
+	string view_name;
 };
 
 unique_ptr<GlobalTableFunctionState> DoIVMInit(ClientContext &context, TableFunctionInitInput &input) {
+	printf("DoIVMInit called \n");
 	auto result = make_uniq<DoIVMData>();
 	return std::move(result);
 }
 
 static unique_ptr<TableRef> DoIVM(ClientContext &context, TableFunctionBindInput &input) {
+	// this is a dummy table function to activate the ivm rewrite optimizer rule
 	printf("In bind_replace!\n");
 	return nullptr;
 }
@@ -60,11 +63,36 @@ struct DoIVMFunctionData : public TableFunctionData {
 static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableFunctionBindInput &input,
                                                   vector<LogicalType> &return_types, vector<string> &names) {
 	printf("In bind\n");
+
+	string view_name = StringValue::Get(input.inputs[0]);
+	printf("View to be incrementally maintained: %s \n", view_name.c_str());
+
+	// obtain the bindings for view_name
+
+	// obtain view defintion from catalog
+	auto &catalog = Catalog::GetSystemCatalog(context);
+	OnEntryNotFound if_not_found;
+	QueryErrorContext error_context = QueryErrorContext();
+	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
+	                                           "main", view_name, if_not_found, error_context);
+	// TODO: error if view itself does not exist
+	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
+	auto view_base_query = std::move(view_entry->query);
+
+	// generate column bindings for the view definition
+	Parser parser;
+	parser.ParseQuery(view_base_query->ToString());
+	auto statement = parser.statements[0].get();
+	Planner planner(context);
+	planner.CreatePlan(statement->Copy());
+
+	// create result set using column bindings returned by the planner
 	auto result = make_uniq<DoIVMFunctionData>();
-	return_types.emplace_back(LogicalType::BOOLEAN);
-	return_types.emplace_back(LogicalType::BIGINT);
-	names.emplace_back("Success");
-	names.emplace_back("Nums");
+	for (int i=0;i<planner.names.size(); i++) {
+		return_types.emplace_back(planner.types[i]);
+		names.emplace_back(planner.names[i]);
+	}
+
 	return std::move(result);
 }
 
@@ -75,8 +103,9 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 		// finished returning values
 		return;
 	}
-	output.SetValue(0, 0, true);
-	output.SetValue(1, 0, 10000);
+	output.SetValue(0, 0, 1);
+	output.SetValue(1, 0, 2);
+	output.SetValue(2, 0, "abc");
 	output.SetCardinality(1);
 	data.offset = data.offset+1;
 	return;
