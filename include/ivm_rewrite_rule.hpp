@@ -55,12 +55,15 @@ public:
 		printf("Plan: %s\n", planner.plan->ToString().c_str());
 
 		Parser newparser;
-		newparser.ParseQuery("SELECT * from delta_bellow");
+		newparser.ParseQuery("SELECT * from delta_hello");
 		statement = newparser.statements[0].get();
 		Planner newplanner(context);
 		newplanner.CreatePlan(statement->Copy());
 		printf("Replace plan: %s\n", newplanner.plan->ToString().c_str());
 		auto new_node = dynamic_cast<LogicalGet*>(newplanner.plan->children[0].get());
+		for (int i=0;i<new_node->GetColumnBindings().size(); i++) {
+			printf("New node CB %d %s\n", i, new_node->GetColumnBindings()[i].ToString().c_str());
+		}
 
 		Optimizer optimizer((Binder&)planner.binder, context);
 		auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
@@ -74,10 +77,24 @@ public:
 		}
 		modified_plan->children.clear();
 		printf("Create replacement node \n");
-		auto replacement_node = make_uniq<LogicalGet>(new_node->table_index, new_node->function, std::move(new_node->bind_data), new_node->returned_types, std::move(new_node->names));
+		// the column names and return types of xchild and new_node will be the same
+		// TODO: cleanup this comment
+		auto replacement_node = make_uniq<LogicalGet>(new_node->table_index, new_node->function,
+		                                              std::move(new_node->bind_data), new_node->returned_types,
+		                                            	new_node->names);
+		replacement_node->column_ids = new_node->column_ids;
+		replacement_node->projection_ids = new_node->projection_ids;
 		printf("Emplace back replacement node in modified plan \n");
 		modified_plan->children.emplace_back(std::move(replacement_node));
 		printf("Modified plan: %s\n", modified_plan->ToString().c_str());
+
+		for (int i=0;i<modified_plan->children[0].get()->GetColumnBindings().size(); i++) {
+			printf("Updated CB %d %s\n", i, modified_plan->children[0].get()->GetColumnBindings()[i].ToString().c_str());
+		}
+
+		plan = std::move(modified_plan);
+
+		printf("Updated plan: %s\n", plan->ToString().c_str());
 
 		return;
 	}
