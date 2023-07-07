@@ -77,11 +77,10 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	                                           "main", view_name, if_not_found, error_context);
 	// TODO: error if view itself does not exist
 	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
-	auto view_base_query = std::move(view_entry->query);
 
 	// generate column bindings for the view definition
 	Parser parser;
-	parser.ParseQuery(view_base_query->ToString());
+	parser.ParseQuery(view_entry->query->ToString());
 	auto statement = parser.statements[0].get();
 	Planner planner(context);
 	planner.CreatePlan(statement->Copy());
