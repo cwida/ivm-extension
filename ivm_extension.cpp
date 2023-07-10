@@ -92,6 +92,10 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 		names.emplace_back(planner.names[i]);
 	}
 
+	// add the multiplicity column
+	return_types.emplace_back(LogicalTypeId::BOOLEAN);
+	names.emplace_back("_duckdb_ivm_multiplicity");
+
 	return std::move(result);
 }
 
@@ -105,6 +109,7 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 	output.SetValue(0, 0, 1);
 	output.SetValue(1, 0, 2);
 	output.SetValue(2, 0, "abc");
+	output.SetValue(3, 0, false);
 	output.SetCardinality(1);
 	data.offset = data.offset+1;
 	return;
