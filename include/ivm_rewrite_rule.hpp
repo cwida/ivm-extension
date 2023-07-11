@@ -67,7 +67,7 @@ public:
 		printf("Xchild node: %s\n", xchild->ToString().c_str());
 		auto col_bindings = xchild->GetColumnBindings();
 		for (int i=0;i<col_bindings.size(); i++) {
-			printf("CB %d %s\n", i, col_bindings[i].ToString().c_str());
+			printf("og get CB %d %s\n", i, col_bindings[i].ToString().c_str());
 		}
 
 
@@ -80,34 +80,51 @@ public:
 		auto scan_function = table.GetScanFunction(context, bind_data);
 		vector<LogicalType> return_types = {};
 		vector<string> return_names = {};
+		vector<column_t> column_ids = {};
+		column_t seed_column_id = 0;
 		for (auto &col : table.GetColumns().Logical()) {
 			printf("creating bind data: %s\n", col.GetName().c_str());
 			return_types.push_back(col.Type());
 			return_names.push_back(col.Name());
+			column_ids.push_back(seed_column_id);
+			seed_column_id += 1;
 		}
 
-
 		auto replacement_get_node = make_uniq<LogicalGet>(table_index += 1, scan_function,
-		                                              std::move(bind_data), return_types,
-		                                              return_names);
+		                                              std::move(bind_data), std::move(return_types),
+		                                              std::move(return_names));
+		replacement_get_node->column_ids = std::move(column_ids);
+//		replacement_get_node->projection_ids = std::move(column_ids);
+
+		for (int i=0;i<replacement_get_node.get()->GetColumnBindings().size(); i++) {
+			printf("Replacement node CB %d %s\n", i, replacement_get_node.get()->GetColumnBindings()[i].ToString().c_str());
+		}
 
 		printf("Create projection node to project away columns \n");
 		// create expressions
-		table_index += 1;
-		idx_t projection_table_idx = table_index;
-		auto e1 = make_uniq<BoundColumnRefExpression>(LogicalType::INTEGER, ColumnBinding(xchild->table_index, 0));
-		auto e2 = make_uniq<BoundColumnRefExpression>(LogicalType::VARCHAR, ColumnBinding(xchild->table_index, 2));
+//		table_index += 1;
+//		idx_t projection_table_idx = table_index;
+		auto e1 = make_uniq<BoundColumnRefExpression>("a", LogicalType::INTEGER, ColumnBinding(table_index, 0));
+		auto e2 = make_uniq<BoundColumnRefExpression>("c", LogicalType::VARCHAR, ColumnBinding(table_index, 2));
 		vector<unique_ptr<Expression>> select_list;
-		select_list.emplace_back(e1.get());
-		select_list.emplace_back(e2.get());
+		select_list.emplace_back(std::move(e1));
+		select_list.emplace_back(std::move(e2));
 		auto projection_node = make_uniq<LogicalProjection>(xchild->table_index, std::move(select_list));
-		projection_node->children.emplace_back(std::move(replacement_get_node));
+		projection_node->AddChild(std::move(replacement_get_node));
+		for (int i=0;i<projection_node.get()->GetColumnBindings().size(); i++) {
+			printf("Projection node CB %d %s %s\n", i, projection_node.get()->GetColumnBindings()[i].ToString().c_str(),
+			       projection_node->ParamsToString().c_str());
+		}
+
 		printf("Replacement plan: %s \n", projection_node->ToString().c_str());
 
 		printf("Emplace back replacement node in modified plan \n");
 		modified_plan->children.clear();
 		modified_plan->children.emplace_back(std::move(projection_node));
 		printf("Modified plan: %s %s\n", modified_plan->ToString().c_str(), modified_plan->ParamsToString().c_str());
+		for (int i=0;i<modified_plan.get()->GetColumnBindings().size(); i++) {
+			printf("Top node CB %d %s\n", i, modified_plan.get()->GetColumnBindings()[i].ToString().c_str());
+		}
 
 		for (int i=0;i<modified_plan->children[0].get()->GetColumnBindings().size(); i++) {
 			printf("Updated CB %d %s\n", i, modified_plan->children[0].get()->GetColumnBindings()[i].ToString().c_str());

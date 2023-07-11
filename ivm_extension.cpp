@@ -87,14 +87,18 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 
 	// create result set using column bindings returned by the planner
 	auto result = make_uniq<DoIVMFunctionData>();
-	for (int i=0;i<planner.names.size(); i++) {
-		return_types.emplace_back(planner.types[i]);
-		names.emplace_back(planner.names[i]);
-	}
+//	for (int i=0;i<planner.names.size(); i++) {
+//		return_types.emplace_back(planner.types[i]);
+//		names.emplace_back(planner.names[i]);
+//	}
+	return_types.emplace_back(LogicalType::INTEGER);
+	return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("a");
+	names.emplace_back("c");
 
 	// add the multiplicity column
-	return_types.emplace_back(LogicalTypeId::BOOLEAN);
-	names.emplace_back("_duckdb_ivm_multiplicity");
+//	return_types.emplace_back(LogicalTypeId::BOOLEAN);
+//	names.emplace_back("_duckdb_ivm_multiplicity");
 
 	return std::move(result);
 }
@@ -107,9 +111,9 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 		return;
 	}
 	output.SetValue(0, 0, 1);
-	output.SetValue(1, 0, 2);
-	output.SetValue(2, 0, "abc");
-	output.SetValue(3, 0, false);
+//	output.SetValue(1, 0, 2);
+	output.SetValue(1, 0, "abc");
+//	output.SetValue(3, 0, false);
 	output.SetCardinality(1);
 	data.offset = data.offset+1;
 	return;
