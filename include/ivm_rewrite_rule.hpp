@@ -10,6 +10,8 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
 #include "duckdb/planner/tableref/bound_basetableref.hpp"
+#include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
 
 namespace duckdb {
 
@@ -83,19 +85,28 @@ public:
 			return_types.push_back(col.Type());
 			return_names.push_back(col.Name());
 		}
+
+
 		auto replacement_get_node = make_uniq<LogicalGet>(table_index += 1, scan_function,
 		                                              std::move(bind_data), return_types,
 		                                              return_names);
 
-
-
-
-
-
+		printf("Create projection node to project away columns \n");
+		// create expressions
+		table_index += 1;
+		idx_t projection_table_idx = table_index;
+		auto e1 = make_uniq<BoundColumnRefExpression>(LogicalType::INTEGER, ColumnBinding(xchild->table_index, 0));
+		auto e2 = make_uniq<BoundColumnRefExpression>(LogicalType::VARCHAR, ColumnBinding(xchild->table_index, 2));
+		vector<unique_ptr<Expression>> select_list;
+		select_list.emplace_back(e1.get());
+		select_list.emplace_back(e2.get());
+		auto projection_node = make_uniq<LogicalProjection>(xchild->table_index, std::move(select_list));
+		projection_node->children.emplace_back(std::move(replacement_get_node));
+		printf("Replacement plan: %s \n", projection_node->ToString().c_str());
 
 		printf("Emplace back replacement node in modified plan \n");
 		modified_plan->children.clear();
-		modified_plan->children.emplace_back(std::move(replacement_node));
+		modified_plan->children.emplace_back(std::move(projection_node));
 		printf("Modified plan: %s %s\n", modified_plan->ToString().c_str(), modified_plan->ParamsToString().c_str());
 
 		for (int i=0;i<modified_plan->children[0].get()->GetColumnBindings().size(); i++) {
