@@ -69,6 +69,7 @@ public:
 		for (int i=0;i<col_bindings.size(); i++) {
 			printf("og get CB %d %s\n", i, col_bindings[i].ToString().c_str());
 		}
+		idx_t x = xchild->table_index;
 
 
 		printf("Create replacement node \n");
@@ -106,9 +107,11 @@ public:
 //		idx_t projection_table_idx = table_index;
 		auto e1 = make_uniq<BoundColumnRefExpression>("a", LogicalType::INTEGER, ColumnBinding(table_index, 0));
 		auto e2 = make_uniq<BoundColumnRefExpression>("c", LogicalType::VARCHAR, ColumnBinding(table_index, 2));
+		auto e3 = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(table_index, 3));
 		vector<unique_ptr<Expression>> select_list;
 		select_list.emplace_back(std::move(e1));
 		select_list.emplace_back(std::move(e2));
+		select_list.emplace_back(std::move(e3));
 		auto projection_node = make_uniq<LogicalProjection>(xchild->table_index, std::move(select_list));
 		projection_node->AddChild(std::move(replacement_get_node));
 		for (int i=0;i<projection_node.get()->GetColumnBindings().size(); i++) {
@@ -121,6 +124,11 @@ public:
 		printf("Emplace back replacement node in modified plan \n");
 		modified_plan->children.clear();
 		modified_plan->children.emplace_back(std::move(projection_node));
+
+		printf("Add the multiplicity column to the top node\n");
+		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(x, 2));
+		modified_plan->expressions.emplace_back(std::move(e));
+
 		printf("Modified plan: %s %s\n", modified_plan->ToString().c_str(), modified_plan->ParamsToString().c_str());
 		for (int i=0;i<modified_plan.get()->GetColumnBindings().size(); i++) {
 			printf("Top node CB %d %s\n", i, modified_plan.get()->GetColumnBindings()[i].ToString().c_str());
