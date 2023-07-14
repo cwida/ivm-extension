@@ -12,6 +12,7 @@
 #include "duckdb/planner/tableref/bound_basetableref.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
+#include "duckdb/planner/operator/logical_aggregate.hpp"
 
 namespace duckdb {
 
@@ -62,7 +63,7 @@ public:
 		auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
 		printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
 
-		auto modified_plan = std::move(optimized_plan);
+		auto modified_plan = std::move(optimized_plan->children[0]);
 		auto xchild = dynamic_cast<LogicalGet*>(modified_plan->children[0].get());
 		printf("Xchild node: %s\n", xchild->ToString().c_str());
 		auto col_bindings = xchild->GetColumnBindings();
@@ -125,20 +126,40 @@ public:
 		modified_plan->children.clear();
 		modified_plan->children.emplace_back(std::move(projection_node));
 
-		printf("Add the multiplicity column to the top node\n");
-		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(x, 2));
-		modified_plan->expressions.emplace_back(std::move(e));
-
+		// modify the middle node
+		auto modified_node_logical_agg = dynamic_cast<LogicalAggregate*>(modified_plan.operator->());
+		auto mult_group_by = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(x, 2));
+		modified_node_logical_agg->groups.emplace_back(std::move(mult_group_by));
 		printf("Modified plan: %s %s\n", modified_plan->ToString().c_str(), modified_plan->ParamsToString().c_str());
-		for (int i=0;i<modified_plan.get()->GetColumnBindings().size(); i++) {
-			printf("Top node CB %d %s\n", i, modified_plan.get()->GetColumnBindings()[i].ToString().c_str());
+		for (int i=0;i<modified_plan->GetColumnBindings().size(); i++) {
+			printf("Middle node CB %d %s\n", i, modified_plan->GetColumnBindings()[i].ToString().c_str());
 		}
 
-		for (int i=0;i<modified_plan->children[0].get()->GetColumnBindings().size(); i++) {
-			printf("Updated CB %d %s\n", i, modified_plan->children[0].get()->GetColumnBindings()[i].ToString().c_str());
+		// modifying the top node
+		vector<idx_t> middlenode_tableindex = modified_plan->GetTableIndex();
+		printf("Middle node table index %lu: ", middlenode_tableindex.size());
+		for (int i=0;i<middlenode_tableindex.size();i++) {
+			printf("index [%llu]", middlenode_tableindex[i]);
+		}
+		printf("\nAdd the multiplicity column to the top node\n");
+		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(2, 0));
+		printf("Add mult column to exp\n");
+		optimized_plan->expressions.emplace_back(std::move(e));
+		printf("Clear children\n");
+		optimized_plan->children.clear();
+		printf("Add child %lu\n", optimized_plan->children.size());
+		optimized_plan->children.emplace_back(std::move(modified_plan));
+
+		printf("Modified plan: %s %s\n", optimized_plan->ToString().c_str(), optimized_plan->ParamsToString().c_str());
+		for (int i=0;i<optimized_plan.get()->GetColumnBindings().size(); i++) {
+			printf("Top node CB %d %s\n", i, optimized_plan.get()->GetColumnBindings()[i].ToString().c_str());
 		}
 
-		plan = std::move(modified_plan);
+//		for (int i=0;i<modified_plan->children[0].get()->GetColumnBindings().size(); i++) {
+//			printf("Updated CB %d %s\n", i, modified_plan->children[0].get()->GetColumnBindings()[i].ToString().c_str());
+//		}
+
+		plan = std::move(optimized_plan);
 
 		printf("Updated plan: %s\n", plan->ToString().c_str());
 

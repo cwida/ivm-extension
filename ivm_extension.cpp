@@ -91,10 +91,10 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 //		return_types.emplace_back(planner.types[i]);
 //		names.emplace_back(planner.names[i]);
 //	}
-	return_types.emplace_back(LogicalType::INTEGER);
-	return_types.emplace_back(LogicalType::VARCHAR);
-	names.emplace_back("a");
-	names.emplace_back("c");
+	return_types.emplace_back(LogicalType::HUGEINT);
+	return_types.emplace_back(LogicalType::BIGINT);
+	names.emplace_back("sum(a)");
+	names.emplace_back("count(c)");
 
 	// add the multiplicity column
 	return_types.emplace_back(LogicalTypeId::BOOLEAN);
