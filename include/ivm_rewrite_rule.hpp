@@ -23,6 +23,34 @@ public:
 		optimize_function = IVMRewriteRuleFunction;
 	}
 
+	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
+		if (!plan->children[0]->children.empty()) {
+			// Assume only one child per node
+			// TODO: A node will have two children only if it is a join?
+			ModifyPlan(context, plan->children[0]);
+		}
+
+		switch (plan->type) {
+			case LogicalOperatorType::LOGICAL_GET: {
+			    auto child = std::move(plan->children[0]);
+
+			    plan->children.emplace_back();
+			}
+		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
+			    auto child = std::move(plan->children[0]);
+
+			    plan->children.emplace_back();
+		    }
+		    case LogicalOperatorType::LOGICAL_PROJECTION: {
+			    auto child = std::move(plan->children[0]);
+
+			    plan->children.emplace_back();
+		    }
+		    default:
+			    throw NotImplementedException("Operator type %s not supported", LogicalOperatorToString(plan->type));
+		}
+	}
+
 	static void IVMRewriteRuleFunction(ClientContext &context, OptimizerExtensionInfo *info,
 	                                   duckdb::unique_ptr<LogicalOperator> &plan) {
 		printf("In the optimize function\n");
@@ -62,6 +90,10 @@ public:
 		Optimizer optimizer((Binder&)planner.binder, context);
 		auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
 		printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
+
+		// Recursively modify the optimized logical plan
+		ModifyPlan(context, optimized_plan);
+
 
 		auto modified_plan = std::move(optimized_plan->children[0]);
 		auto xchild = dynamic_cast<LogicalGet*>(modified_plan->children[0].get());
