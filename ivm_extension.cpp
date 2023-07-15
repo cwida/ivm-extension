@@ -87,14 +87,15 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 
 	// create result set using column bindings returned by the planner
 	auto result = make_uniq<DoIVMFunctionData>();
-//	for (int i=0;i<planner.names.size(); i++) {
-//		return_types.emplace_back(planner.types[i]);
-//		names.emplace_back(planner.names[i]);
-//	}
-	return_types.emplace_back(LogicalType::HUGEINT);
-	return_types.emplace_back(LogicalType::BIGINT);
-	names.emplace_back("sum(a)");
-	names.emplace_back("count(c)");
+	for (int i=0;i<planner.names.size(); i++) {
+		return_types.emplace_back(planner.types[i]);
+		names.emplace_back(planner.names[i]);
+//		printf("Name, type: %s %s \n",planner.names[i].c_str(), planner.types[i].ToString().c_str());
+	}
+//	return_types.emplace_back(LogicalType::HUGEINT);
+//	return_types.emplace_back(LogicalType::BIGINT);
+//	names.emplace_back("sum(a)");
+//	names.emplace_back("count(c)");
 
 	// add the multiplicity column
 	return_types.emplace_back(LogicalTypeId::BOOLEAN);
@@ -110,12 +111,12 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 		// finished returning values
 		return;
 	}
-	output.SetValue(0, 0, 1);
+//	output.SetValue(0, 0, 1);
 //	output.SetValue(1, 0, 2);
-	output.SetValue(1, 0, "abc");
-	output.SetValue(3, 0, false);
-	output.SetCardinality(1);
-	data.offset = data.offset+1;
+//	output.SetValue(1, 0, "abc");
+//	output.SetValue(3, 0, false);
+//	output.SetCardinality(1);
+//	data.offset = data.offset+1;
 	return;
 }
 
