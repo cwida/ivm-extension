@@ -23,28 +23,110 @@ public:
 		optimize_function = IVMRewriteRuleFunction;
 	}
 
-	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
+	static void ModifyTopNode(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
+		printf("\nAdd the multiplicity column to the top node\n");
+		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(plan->children[0].get()->GetTableIndex()[0], 2));
+		printf("Add mult column to exp\n");
+		plan->expressions.emplace_back(std::move(e));
+		//			    printf("Clear children\n");
+		//			    plan->children.clear();
+		//			    printf("Add child %lu\n", plan->children.size());
+		//			    plan->children.emplace_back(std::move(modified_plan));
+
+		printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
+		for (int i=0;i<plan.get()->GetColumnBindings().size(); i++) {
+			printf("Top node CB %d %s\n", i, plan.get()->GetColumnBindings()[i].ToString().c_str());
+		}
+	}
+
+	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index) {
 		if (!plan->children[0]->children.empty()) {
 			// Assume only one child per node
 			// TODO: A node will have two children only if it is a join?
-			ModifyPlan(context, plan->children[0]);
+			ModifyPlan(context, plan->children[0], table_index);
 		}
 
-		switch (plan->type) {
+		auto &catalog = Catalog::GetSystemCatalog(context);
+		OnEntryNotFound if_not_found;
+		QueryErrorContext error_context = QueryErrorContext();
+
+		switch (plan->children[0].get()->type) {
 			case LogicalOperatorType::LOGICAL_GET: {
 			    auto child = std::move(plan->children[0]);
 
-			    plan->children.emplace_back();
+			    printf("Create replacement get node \n");
+			    string delta_table = "delta_hello";
+			    auto table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
+			                                                 "main",delta_table, OnEntryNotFound::THROW_EXCEPTION, error_context);
+			    auto &table = table_catalog_entry->Cast<TableCatalogEntry>();
+			    unique_ptr<FunctionData> bind_data;
+			    auto scan_function = table.GetScanFunction(context, bind_data);
+			    vector<LogicalType> return_types = {};
+			    vector<string> return_names = {};
+			    vector<column_t> column_ids = {};
+			    column_t seed_column_id = 0;
+			    for (auto &col : table.GetColumns().Logical()) {
+				    printf("creating bind data: %s\n", col.GetName().c_str());
+				    return_types.push_back(col.Type());
+				    return_names.push_back(col.Name());
+				    column_ids.push_back(seed_column_id);
+				    seed_column_id += 1;
+			    }
+
+			    auto replacement_get_node = make_uniq<LogicalGet>(table_index += 1, scan_function,
+			                                                      std::move(bind_data), std::move(return_types),
+			                                                      std::move(return_names));
+			    replacement_get_node->column_ids = std::move(column_ids);
+			    //	replacement_get_node->projection_ids = std::move(column_ids);
+
+			    for (int i=0;i<replacement_get_node.get()->GetColumnBindings().size(); i++) {
+				    printf("Replacement node CB %d %s\n", i, replacement_get_node.get()->GetColumnBindings()[i].ToString().c_str());
+			    }
+
+			    printf("Create projection node to project away unneeded columns \n");
+			    // create expressions: we use `table_index` because that is the index of the new base table node
+			    //		table_index += 1;
+			    //		idx_t projection_table_idx = table_index;
+			    auto e1 = make_uniq<BoundColumnRefExpression>("a", LogicalType::INTEGER, ColumnBinding(table_index, 0));
+			    auto e2 = make_uniq<BoundColumnRefExpression>("c", LogicalType::VARCHAR, ColumnBinding(table_index, 2));
+			    auto e3 = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(table_index, 3));
+			    vector<unique_ptr<Expression>> select_list;
+			    select_list.emplace_back(std::move(e1));
+			    select_list.emplace_back(std::move(e2));
+			    select_list.emplace_back(std::move(e3));
+			    auto projection_node = make_uniq<LogicalProjection>(child->GetTableIndex()[0], std::move(select_list));
+			    projection_node->AddChild(std::move(replacement_get_node));
+			    for (int i=0;i<projection_node.get()->GetColumnBindings().size(); i++) {
+				    printf("Projection node CB %d %s %s\n", i, projection_node.get()->GetColumnBindings()[i].ToString().c_str(),
+				           projection_node->ParamsToString().c_str());
+			    }
+
+			    printf("Replacement plan: %s \n", projection_node->ToString().c_str());
+			    printf("Emplace back replacement node in parent node \n");
+			    plan->children.clear();
+			    plan->children.emplace_back(std::move(projection_node));
+			    break;
 			}
-		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
-			    auto child = std::move(plan->children[0]);
-
-			    plan->children.emplace_back();
-		    }
+//		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
+//			    auto child = std::move(plan->children[0]);
+//
+//			    plan->children.emplace_back();
+//		    }
 		    case LogicalOperatorType::LOGICAL_PROJECTION: {
-			    auto child = std::move(plan->children[0]);
+			    printf("\nAdd the multiplicity column to the projection node\n");
+			    auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(plan->children[0].get()->GetTableIndex()[0], 0));
+			    printf("Add mult column to exp\n");
+			    plan->expressions.emplace_back(std::move(e));
+//			    printf("Clear children\n");
+//			    plan->children.clear();
+//			    printf("Add child %lu\n", plan->children.size());
+//			    plan->children.emplace_back(std::move(modified_plan));
 
-			    plan->children.emplace_back();
+			    printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
+			    for (int i=0;i<plan.get()->GetColumnBindings().size(); i++) {
+				    printf("Top node CB %d %s\n", i, plan.get()->GetColumnBindings()[i].ToString().c_str());
+			    }
+			    break;
 		    }
 		    default:
 			    throw NotImplementedException("Operator type %s not supported", LogicalOperatorToString(plan->type));
@@ -92,8 +174,10 @@ public:
 		printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
 
 		// Recursively modify the optimized logical plan
-		ModifyPlan(context, optimized_plan);
-
+		ModifyPlan(context, optimized_plan, table_index);
+		ModifyTopNode(context, optimized_plan);
+		plan = std::move(optimized_plan);
+		return;
 
 		auto modified_plan = std::move(optimized_plan->children[0]);
 		auto xchild = dynamic_cast<LogicalGet*>(modified_plan->children[0].get());
