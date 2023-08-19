@@ -13,6 +13,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
+#include "duckdb/planner/operator/logical_get.hpp"
 
 namespace duckdb {
 
@@ -25,7 +26,11 @@ public:
 
 	static void ModifyTopNode(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
 		printf("\nAdd the multiplicity column to the top node\n");
-		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(plan->children[0].get()->GetTableIndex()[0], 2));
+
+		// the table_idx used to create ColumnBinding will be that of the top node's child
+		// the column_idx used to create ColumnBinding will be how the column binding for replacement get is done.
+		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
+		                                             ColumnBinding(plan->children[0].get()->GetTableIndex()[0], plan->children[0].get()->GetColumnBindings().size()+1));
 		printf("Add mult column to exp\n");
 		plan->expressions.emplace_back(std::move(e));
 		//			    printf("Clear children\n");
@@ -42,7 +47,8 @@ public:
 	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index) {
 		if (!plan->children[0]->children.empty()) {
 			// Assume only one child per node
-			// TODO: A node will have two children only if it is a join?
+			// TODO: Add support for modification of plan with multiple children
+			// A node will have two children only if it is a join?
 			ModifyPlan(context, plan->children[0], table_index);
 		}
 
@@ -53,6 +59,7 @@ public:
 		switch (plan->children[0].get()->type) {
 			case LogicalOperatorType::LOGICAL_GET: {
 			    auto child = std::move(plan->children[0]);
+			    auto child_get = dynamic_cast<LogicalGet*>(child.get());
 
 			    printf("Create replacement get node \n");
 			    string delta_table = "delta_hello";
@@ -73,6 +80,7 @@ public:
 				    seed_column_id += 1;
 			    }
 
+			    // the new get node that reads the delta table gets a new table index
 			    auto replacement_get_node = make_uniq<LogicalGet>(table_index += 1, scan_function,
 			                                                      std::move(bind_data), std::move(return_types),
 			                                                      std::move(return_names));
@@ -87,13 +95,55 @@ public:
 			    // create expressions: we use `table_index` because that is the index of the new base table node
 			    //		table_index += 1;
 			    //		idx_t projection_table_idx = table_index;
-			    auto e1 = make_uniq<BoundColumnRefExpression>("a", LogicalType::INTEGER, ColumnBinding(table_index, 0));
-			    auto e2 = make_uniq<BoundColumnRefExpression>("c", LogicalType::VARCHAR, ColumnBinding(table_index, 2));
-			    auto e3 = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(table_index, 3));
+
+
+			    /* The new get node which will read the delta table will read all columns in the delta table
+			     * The original get node will read only the columns that the query uses
+			     * So, we create a projection node to project away the extra columns.
+			     * Thus, original get node will be replaced by a replacement get + projection node
+			     * the column_ids field in the original get node contains the mapping of the logical ids that the columns have
+			     * to ids that the get is using. The names field in the orignal get contains the column names. Using a
+			     * combination of these two, we create the column mapping of the projection node.
+			     * original_get->column_ids
+					(duckdb::vector<unsigned long long, true>) $5 = {
+					  std::__1::vector<unsigned long long, std::__1::allocator<unsigned long long> > = size=2 {
+						[0] = 0
+						[1] = 2
+					  }
+					}
+			     * orignal_get->names
+			     * (duckdb::vector<std::basic_string<char, std::char_traits<char>, std::allocator<char> >, true>) $3 = {
+					std::__1::vector<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::allocator<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > > > = size=3 {
+					  [0] = "a"
+					  [1] = "b"
+					  [2] = "c"
+					}
+					}
+			     * original_get->projection_ids
+					(duckdb::vector<unsigned long long, true>) $4 = {
+					  std::__1::vector<unsigned long long, std::__1::allocator<unsigned long long> > = size=2 {
+						[0] = 0
+						[1] = 1
+					  }
+					}
+				*/
+
+			    // the column bindings are created using the table index of the replacement get node. The column_idx are
+			    // from the original get node, but can be assumed to have the same idx as the replacement get.
 			    vector<unique_ptr<Expression>> select_list;
-			    select_list.emplace_back(std::move(e1));
-			    select_list.emplace_back(std::move(e2));
-			    select_list.emplace_back(std::move(e3));
+			    for (int i=0;i<child_get->column_ids.size();i++) {
+				    printf("Create column mapping: %s, %llu", child_get->names[child_get->column_ids[i]].c_str(), child_get->column_ids[i]);
+				    auto col = make_uniq<BoundColumnRefExpression>(child_get->names[child_get->column_ids[i]],
+				                                                   child_get->returned_types[child_get->column_ids[i]],
+				                                                   ColumnBinding(table_index, child_get->column_ids[i]));
+				    select_list.emplace_back(std::move(col));
+			    }
+
+			    auto multiplicity_col = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(table_index, child_get->column_ids.size()+1));
+			    select_list.emplace_back(std::move(multiplicity_col));
+
+			    // the projection node's table_idx is the table index of the original get node that is being replaced
+			    // because that idx is already being used in the logical plan as reference
 			    auto projection_node = make_uniq<LogicalProjection>(child->GetTableIndex()[0], std::move(select_list));
 			    projection_node->AddChild(std::move(replacement_get_node));
 			    for (int i=0;i<projection_node.get()->GetColumnBindings().size(); i++) {
@@ -107,11 +157,11 @@ public:
 			    plan->children.emplace_back(std::move(projection_node));
 			    break;
 			}
-//		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
-//			    auto child = std::move(plan->children[0]);
-//
-//			    plan->children.emplace_back();
-//		    }
+		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
+			    auto child = std::move(plan->children[0]);
+
+			    plan->children.emplace_back();
+		    }
 		    case LogicalOperatorType::LOGICAL_PROJECTION: {
 			    printf("\nAdd the multiplicity column to the projection node\n");
 			    auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(plan->children[0].get()->GetTableIndex()[0], 0));
