@@ -29,6 +29,7 @@ public:
 
 		// the table_idx used to create ColumnBinding will be that of the top node's child
 		// the column_idx used to create ColumnBinding will be how the column binding for replacement get is done.
+		// TODO: This needs to be generated using column binding of the child node
 		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
 		                                             ColumnBinding(plan->children[0].get()->GetTableIndex()[0], plan->children[0].get()->GetColumnBindings().size()+1));
 		printf("Add mult column to exp\n");
@@ -157,11 +158,15 @@ public:
 			    plan->children.emplace_back(std::move(projection_node));
 			    break;
 			}
+			    // TODO: The table index for the multiplicity column will be this node's child node's multiplicity column
+			    // the column binding for the multiplicity column will be also generated using the child's node column mapping
 		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
 			    auto child = std::move(plan->children[0]);
 
 			    plan->children.emplace_back();
 		    }
+			    // TODO: The table index for the multiplicity column will be this node's child node's multiplicity column
+			    // the column binding for the multiplicity column will be also generated using the child's node column mapping
 		    case LogicalOperatorType::LOGICAL_PROJECTION: {
 			    printf("\nAdd the multiplicity column to the projection node\n");
 			    auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(plan->children[0].get()->GetTableIndex()[0], 0));
