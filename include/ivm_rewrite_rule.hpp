@@ -44,7 +44,6 @@ public:
 		if (!plan->children[0]->children.empty()) {
 			// Assume only one child per node
 			// TODO: Add support for modification of plan with multiple children
-			// A node will have two children only if it is a join?
 			ModifyPlan(context, plan->children[0], table_index, multiplicity_col_idx);
 		}
 
