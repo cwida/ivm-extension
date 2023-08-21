@@ -24,20 +24,15 @@ public:
 		optimize_function = IVMRewriteRuleFunction;
 	}
 
-	static void ModifyTopNode(ClientContext &context, unique_ptr<LogicalOperator> &plan) {
+	static void ModifyTopNode(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &multiplicity_col_idx) {
 		printf("\nAdd the multiplicity column to the top node\n");
 
 		// the table_idx used to create ColumnBinding will be that of the top node's child
-		// the column_idx used to create ColumnBinding will be how the column binding for replacement get is done.
-		// TODO: This needs to be generated using column binding of the child node
+		// the column_idx used to create ColumnBinding for multiplicity column will be stored context from the child node
 		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
-		                                             ColumnBinding(plan->children[0].get()->GetTableIndex()[0], plan->children[0].get()->GetColumnBindings().size()+1));
+		                                             ColumnBinding(plan->children[0]->GetTableIndex()[0], multiplicity_col_idx));
 		printf("Add mult column to exp\n");
 		plan->expressions.emplace_back(std::move(e));
-		//			    printf("Clear children\n");
-		//			    plan->children.clear();
-		//			    printf("Add child %lu\n", plan->children.size());
-		//			    plan->children.emplace_back(std::move(modified_plan));
 
 		printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
 		for (int i=0;i<plan.get()->GetColumnBindings().size(); i++) {
@@ -45,12 +40,12 @@ public:
 		}
 	}
 
-	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index) {
+	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index, idx_t &multiplicity_col_idx) {
 		if (!plan->children[0]->children.empty()) {
 			// Assume only one child per node
 			// TODO: Add support for modification of plan with multiple children
 			// A node will have two children only if it is a join?
-			ModifyPlan(context, plan->children[0], table_index);
+			ModifyPlan(context, plan->children[0], table_index, multiplicity_col_idx);
 		}
 
 		auto &catalog = Catalog::GetSystemCatalog(context);
@@ -140,8 +135,13 @@ public:
 				    select_list.emplace_back(std::move(col));
 			    }
 
-			    auto multiplicity_col = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(table_index, child_get->column_ids.size()+1));
+			    // for the creation projection node, multiplicity table idx and column idx will be fetched from the replacement get node
+			    multiplicity_col_idx = std::find(replacement_get_node->names.begin(), replacement_get_node->names.end(), "_duckdb_ivm_multiplicity") - replacement_get_node->names.begin();
+			    auto multiplicity_col = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(table_index, multiplicity_col_idx));
 			    select_list.emplace_back(std::move(multiplicity_col));
+			    // multiplicity column idx of the projection node (after binding) will be select_list.size() - 1
+			    // because the multiplicity column was added to the projection node at the very end.
+			    multiplicity_col_idx = select_list.size() - 1;
 
 			    // the projection node's table_idx is the table index of the original get node that is being replaced
 			    // because that idx is already being used in the logical plan as reference
@@ -228,9 +228,15 @@ public:
 		auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
 		printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
 
+		// variable to store the column_idx for multiplicity column at each node
+		// we do this while creation / modification of the node
+		// because this information will not be available while modifying the parent node
+		// for ex. parent.children[0] will not contain column names to find the index of the multiplicity column
+		idx_t multiplicity_col_idx;
+
 		// Recursively modify the optimized logical plan
-		ModifyPlan(context, optimized_plan, table_index);
-		ModifyTopNode(context, optimized_plan);
+		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx);
+		ModifyTopNode(context, optimized_plan, multiplicity_col_idx);
 		plan = std::move(optimized_plan);
 		return;
 
