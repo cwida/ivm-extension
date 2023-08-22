@@ -165,15 +165,15 @@ public:
 			    // TODO: The table index for the multiplicity column will be this node's child node's multiplicity column
 			    // the column binding for the multiplicity column will be also generated using the child's node column mapping
 		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
-			    auto child = std::move(plan->children[0]);
-			    for (int i=0;i<child->GetColumnBindings().size(); i++) {
-				    printf("Middle node CB before %d %s\n", i, child->GetColumnBindings()[i].ToString().c_str());
-			    }
+//			    auto child = std::move(plan->children[0]);
+//			    for (int i=0;i<child->GetColumnBindings().size(); i++) {
+//				    printf("Middle node CB before %d %s\n", i, child->GetColumnBindings()[i].ToString().c_str());
+//			    }
 
-			    auto modified_node_logical_agg = dynamic_cast<LogicalAggregate*>(child.get()); // dynamic_cast<LogicalAggregate*>(modified_plan.operator->());
+			    auto modified_node_logical_agg = dynamic_cast<LogicalAggregate*>(plan->children[0].get()); // dynamic_cast<LogicalAggregate*>(modified_plan.operator->());
 			    printf("Aggregate index: %llu Group index: %llu\n", modified_node_logical_agg->aggregate_index, modified_node_logical_agg->group_index);
 			    auto mult_group_by = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
-			                                                             ColumnBinding(child.get()->GetTableIndex()[0], multiplicity_col_idx));
+			                                                             ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));
 			    modified_node_logical_agg->groups.emplace_back(std::move(mult_group_by));
 			    multiplicity_col_idx = modified_node_logical_agg->groups.size() - 1;
 			    multiplicity_table_idx = modified_node_logical_agg->group_index;
@@ -181,8 +181,8 @@ public:
 				    printf("Middle node CB %d %s\n", i, modified_node_logical_agg->GetColumnBindings()[i].ToString().c_str());
 			    }
 
-			    plan->children.clear();
-			    plan->children.emplace_back(modified_node_logical_agg);
+//			    plan->children.clear();
+//			    plan->children.emplace_back(modified_node_logical_agg);
 			    printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
 			    break;
 		    }
@@ -258,7 +258,6 @@ public:
 
 		// Recursively modify the optimized logical plan
 		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx);
-		printf("Modified plan in caller: %s %s\n", optimized_plan->ToString().c_str(), optimized_plan->ParamsToString().c_str());
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
 		plan = std::move(optimized_plan);
 		return;
