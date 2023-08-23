@@ -90,12 +90,8 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	for (int i=0;i<planner.names.size(); i++) {
 		return_types.emplace_back(planner.types[i]);
 		names.emplace_back(planner.names[i]);
-//		printf("Name, type: %s %s \n",planner.names[i].c_str(), planner.types[i].ToString().c_str());
+		// printf("Name, type: %s %s \n",planner.names[i].c_str(), planner.types[i].ToString().c_str());
 	}
-//	return_types.emplace_back(LogicalType::HUGEINT);
-//	return_types.emplace_back(LogicalType::BIGINT);
-//	names.emplace_back("sum(a)");
-//	names.emplace_back("count(c)");
 
 	// add the multiplicity column
 	return_types.emplace_back(LogicalTypeId::BOOLEAN);
