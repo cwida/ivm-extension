@@ -2,6 +2,10 @@
 #ifndef DUCKDB_IVM_REWRITE_RULE_HPP
 #define DUCKDB_IVM_REWRITE_RULE_HPP
 
+#include "ivm_parser.hpp"
+
+#include <utility>
+
 #include "duckdb.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/planner.hpp"
@@ -20,7 +24,6 @@ namespace duckdb {
 class IVMRewriteRule : public OptimizerExtension {
 public:
 	IVMRewriteRule() {
-		printf("Initializing optimizer rule");
 		optimize_function = IVMRewriteRuleFunction;
 	}
 
@@ -84,17 +87,12 @@ public:
 			                                                      std::move(bind_data), std::move(return_types),
 			                                                      std::move(return_names));
 			    replacement_get_node->column_ids = std::move(column_ids);
-			    //	replacement_get_node->projection_ids = std::move(column_ids);
 
 			    for (int i=0;i<replacement_get_node.get()->GetColumnBindings().size(); i++) {
 				    printf("Replacement node CB %d %s\n", i, replacement_get_node.get()->GetColumnBindings()[i].ToString().c_str());
 			    }
 
 			    printf("Create projection node to project away unneeded columns \n");
-			    // create expressions: we use `table_index` because that is the index of the new base table node
-			    //		table_index += 1;
-			    //		idx_t projection_table_idx = table_index;
-
 
 			    /* The new get node which will read the delta table will read all columns in the delta table
 			     * The original get node will read only the columns that the query uses
@@ -162,13 +160,7 @@ public:
 			    plan->children.emplace_back(std::move(projection_node));
 			    break;
 			}
-			    // TODO: The table index for the multiplicity column will be this node's child node's multiplicity column
-			    // the column binding for the multiplicity column will be also generated using the child's node column mapping
 		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
-//			    auto child = std::move(plan->children[0]);
-//			    for (int i=0;i<child->GetColumnBindings().size(); i++) {
-//				    printf("Middle node CB before %d %s\n", i, child->GetColumnBindings()[i].ToString().c_str());
-//			    }
 
 			    auto modified_node_logical_agg = dynamic_cast<LogicalAggregate*>(plan->children[0].get()); // dynamic_cast<LogicalAggregate*>(modified_plan.operator->());
 			    printf("Aggregate index: %llu Group index: %llu\n", modified_node_logical_agg->aggregate_index, modified_node_logical_agg->group_index);
@@ -186,22 +178,8 @@ public:
 			    printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
 			    break;
 		    }
-			    // TODO: The table index for the multiplicity column will be this node's child node's multiplicity column
-			    // the column binding for the multiplicity column will be also generated using the child's node column mapping
 		    case LogicalOperatorType::LOGICAL_PROJECTION: {
-			    printf("\nAdd the multiplicity column to the projection node\n");
-//			    auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN, ColumnBinding(plan->children[0].get()->GetTableIndex()[0], 0));
-			    printf("Add mult column to exp\n");
-//			    plan->expressions.emplace_back(std::move(e));
-//			    printf("Clear children\n");
-//			    plan->children.clear();
-//			    printf("Add child %lu\n", plan->children.size());
-//			    plan->children.emplace_back(std::move(modified_plan));
-
-			    printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
-			    for (int i=0;i<plan.get()->GetColumnBindings().size(); i++) {
-				    printf("Top node CB %d %s\n", i, plan.get()->GetColumnBindings()[i].ToString().c_str());
-			    }
+			    // TODO: Implement modification of projection node
 			    break;
 		    }
 		    default:
@@ -224,6 +202,11 @@ public:
 		if (child->GetName() != "DOIVM") {
 			return;
 		}
+
+		auto x = dynamic_cast<LogicalGet*>(child);
+		auto table = x->parameters[0].ToString();
+		auto fd = dynamic_cast<DoIVMFunctionData*>(x->bind_data.get());
+		printf("Schema: %s, Catalog: %s, Table: %s\n", fd->catalog.c_str(), fd->schema.c_str(), table.c_str());
 
 		printf("Activating the rewrite rule\n");
 		idx_t table_index = 2000;

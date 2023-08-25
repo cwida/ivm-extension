@@ -9,6 +9,19 @@
 
 namespace duckdb {
 
+struct DoIVMFunctionData : public TableFunctionData {
+	DoIVMFunctionData() {
+	}
+
+	bool finished = false;
+	double sf = 0;
+	string catalog = INVALID_CATALOG;
+	string schema = DEFAULT_SCHEMA;
+	string suffix;
+	bool overwrite = false;
+	uint32_t children = 1;
+	int step = -1;
+};
 
 struct IVMInfo : ParserExtensionInfo {
 	unique_ptr<Connection> db_conn;

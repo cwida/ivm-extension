@@ -2,11 +2,11 @@
 
 #include "ivm-extension.hpp"
 #include "ivm_rewrite_rule.hpp"
+#include "ivm_parser.hpp"
 
 #include "duckdb/common/serializer/buffered_serializer.hpp"
 #include "duckdb/main/appender.hpp"
 #include "duckdb/main/connection.hpp"
-#include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/parser_extension.hpp"
@@ -23,7 +23,6 @@
 
 #include <map>
 #include <stdio.h>
-#include <unistd.h>
 
 namespace duckdb {
 
@@ -45,20 +44,6 @@ static unique_ptr<TableRef> DoIVM(ClientContext &context, TableFunctionBindInput
 	printf("In bind_replace!\n");
 	return nullptr;
 }
-
-struct DoIVMFunctionData : public TableFunctionData {
-	DoIVMFunctionData() {
-	}
-
-	bool finished = false;
-	double sf = 0;
-	string catalog = INVALID_CATALOG;
-	string schema = DEFAULT_SCHEMA;
-	string suffix;
-	bool overwrite = false;
-	uint32_t children = 1;
-	int step = -1;
-};
 
 static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableFunctionBindInput &input,
                                                   vector<LogicalType> &return_types, vector<string> &names) {
@@ -90,7 +75,6 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	for (int i=0;i<planner.names.size(); i++) {
 		return_types.emplace_back(planner.types[i]);
 		names.emplace_back(planner.names[i]);
-		// printf("Name, type: %s %s \n",planner.names[i].c_str(), planner.types[i].ToString().c_str());
 	}
 
 	// add the multiplicity column
@@ -107,12 +91,6 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 		// finished returning values
 		return;
 	}
-//	output.SetValue(0, 0, 1);
-//	output.SetValue(1, 0, 2);
-//	output.SetValue(1, 0, "abc");
-//	output.SetValue(3, 0, false);
-//	output.SetCardinality(1);
-//	data.offset = data.offset+1;
 	return;
 }
 
@@ -122,6 +100,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	auto &db_config = duckdb::DBConfig::GetConfig(instance);
 	Connection con(instance);
 	auto ivm_parser = duckdb::IVMParserExtension(&con);
+
 	auto ivm_rewrite_rule = duckdb::IVMRewriteRule();
 
 	db_config.parser_extensions.push_back(ivm_parser);
