@@ -64,9 +64,11 @@ public:
 			    auto child_get = dynamic_cast<LogicalGet*>(child.get());
 
 			    printf("Create replacement get node \n");
-			    string delta_table = "delta_hello";
-			    auto table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
-			                                                 "main",delta_table, OnEntryNotFound::THROW_EXCEPTION, error_context);
+			    string delta_table = "delta_" + child_get->GetTable().get()->name;
+			    string delta_table_schema = child_get->GetTable().get()->schema.name;
+			    string delta_table_catalog = child_get->GetTable().get()->catalog.GetName();
+			    auto table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, delta_table_catalog,
+			                                                 delta_table_schema,delta_table, OnEntryNotFound::THROW_EXCEPTION, error_context);
 			    auto &table = table_catalog_entry->Cast<TableCatalogEntry>();
 			    unique_ptr<FunctionData> bind_data;
 			    auto scan_function = table.GetScanFunction(context, bind_data);
@@ -203,21 +205,22 @@ public:
 			return;
 		}
 
-		auto x = dynamic_cast<LogicalGet*>(child);
-		auto table = x->parameters[0].ToString();
-		auto fd = dynamic_cast<DoIVMFunctionData*>(x->bind_data.get());
-		printf("Schema: %s, Catalog: %s, Table: %s\n", fd->catalog.c_str(), fd->schema.c_str(), table.c_str());
-
 		printf("Activating the rewrite rule\n");
+
+		auto child_get = dynamic_cast<LogicalGet*>(child);
+		auto view = child_get->parameters[0].ToString();
+		auto table_function_data = dynamic_cast<DoIVMFunctionData*>(child_get->bind_data.get());
+		auto view_catalog = table_function_data->catalog == "" ? "memory" : table_function_data->catalog;
+		auto view_schema = table_function_data->schema;
+
 		idx_t table_index = 2000;
 
 		// obtain view defintion from catalog
 		auto &catalog = Catalog::GetSystemCatalog(context);
 		OnEntryNotFound if_not_found;
 		QueryErrorContext error_context = QueryErrorContext();
-		// TODO: how to get view name here?
-		auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
-		                                           "main", "test", if_not_found, error_context);
+		auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog,
+		                                           view_schema, view, if_not_found, error_context);
 		// TODO: error if view itself does not exist
 		auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 		printf("View base query: %s \n", view_entry->query->ToString().c_str());
@@ -226,6 +229,9 @@ public:
 		Parser parser;
 		parser.ParseQuery(view_entry->query->ToString());
 		auto statement = parser.statements[0].get();
+		if (statement->type != StatementType::SELECT_STATEMENT) {
+			throw NotImplementedException("Only select queries in view definition supported");
+		}
 		Planner planner(context);
 		planner.CreatePlan(statement->Copy());
 		Optimizer optimizer((Binder&)planner.binder, context);
