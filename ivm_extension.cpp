@@ -44,10 +44,14 @@ static unique_ptr<TableRef> DoIVM(ClientContext &context, TableFunctionBindInput
 
 static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableFunctionBindInput &input,
                                                   vector<LogicalType> &return_types, vector<string> &names) {
-	printf("In bind\n");
-
-	string view_name = StringValue::Get(input.inputs[0]);
+	string view_catalog_name = StringValue::Get(input.inputs[0]);
+	string view_schema_name = StringValue::Get(input.inputs[1]);
+	string view_name = StringValue::Get(input.inputs[2]);
 	printf("View to be incrementally maintained: %s \n", view_name.c_str());
+
+	input.named_parameters["view_name"] = view_name;
+	input.named_parameters["view_catalog_name"] = view_catalog_name;
+	input.named_parameters["view_schema_name"] = view_schema_name;
 
 	// obtain the bindings for view_name
 
@@ -55,8 +59,8 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	auto &catalog = Catalog::GetSystemCatalog(context);
 	OnEntryNotFound if_not_found;
 	QueryErrorContext error_context = QueryErrorContext();
-	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, "memory",
-	                                           "main", view_name, if_not_found, error_context);
+	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog_name,
+	                                           view_schema_name, view_name, if_not_found, error_context);
 	// TODO: error if view itself does not exist
 	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 
@@ -82,7 +86,6 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 }
 
 static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-	printf("In table function\n");
 	auto &data = dynamic_cast<DoIVMData &>(*data_p.global_state);
 	if (data.offset >= 1) {
 		// finished returning values
@@ -103,11 +106,15 @@ static void LoadInternal(DatabaseInstance &instance) {
 	db_config.parser_extensions.push_back(ivm_parser);
 	db_config.optimizer_extensions.push_back(ivm_rewrite_rule);
 
-	TableFunction ivm_func("DoIVM", {LogicalType::VARCHAR}, DoIVMFunction, DoIVMBind, DoIVMInit);
+	TableFunction ivm_func("DoIVM", {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                       DoIVMFunction, DoIVMBind, DoIVMInit);
 	con.BeginTransaction();
 	auto &catalog = Catalog::GetSystemCatalog(*con.context);
 	ivm_func.bind_replace = reinterpret_cast<table_function_bind_replace_t>(DoIVM);
 	ivm_func.name = "DoIVM";
+	ivm_func.named_parameters["view_catalog_name"];
+	ivm_func.named_parameters["view_schema_name"];
+	ivm_func.named_parameters["view_name"];
 	CreateTableFunctionInfo ivm_func_info(ivm_func);
 	catalog.CreateTableFunction(*con.context, &ivm_func_info);
 	con.Commit();

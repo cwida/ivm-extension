@@ -15,8 +15,9 @@ struct DoIVMFunctionData : public TableFunctionData {
 
 	bool finished = false;
 	double sf = 0;
-	string catalog = INVALID_CATALOG;
-	string schema = DEFAULT_SCHEMA;
+	string catalog;
+	string schema;
+	string view;
 	string suffix;
 	bool overwrite = false;
 	uint32_t children = 1;
@@ -26,7 +27,6 @@ struct DoIVMFunctionData : public TableFunctionData {
 struct IVMInfo : ParserExtensionInfo {
 	unique_ptr<Connection> db_conn;
 	explicit IVMInfo(unique_ptr<Connection> db_conn) : db_conn(std::move(db_conn)) {}
-
 };
 
 class IVMParserExtension : public ParserExtension {

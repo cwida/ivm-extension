@@ -206,10 +206,9 @@ public:
 		printf("Activating the rewrite rule\n");
 
 		auto child_get = dynamic_cast<LogicalGet*>(child);
-		auto view = child_get->parameters[0].ToString();
-		auto table_function_data = dynamic_cast<DoIVMFunctionData*>(child_get->bind_data.get());
-		auto view_catalog = table_function_data->catalog == "" ? "memory" : table_function_data->catalog;
-		auto view_schema = table_function_data->schema;
+		auto view = child_get->named_parameters["view_name"].ToString();
+		auto view_catalog = child_get->named_parameters["view_catalog_name"].ToString();
+		auto view_schema = child_get->named_parameters["view_schema_name"].ToString();
 
 		idx_t table_index = 2000;
 
