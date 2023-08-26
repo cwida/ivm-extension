@@ -34,14 +34,11 @@ struct DoIVMData : public GlobalTableFunctionState {
 };
 
 unique_ptr<GlobalTableFunctionState> DoIVMInit(ClientContext &context, TableFunctionInitInput &input) {
-	printf("DoIVMInit called \n");
 	auto result = make_uniq<DoIVMData>();
 	return std::move(result);
 }
 
 static unique_ptr<TableRef> DoIVM(ClientContext &context, TableFunctionBindInput &input) {
-	// this is a dummy table function to activate the ivm rewrite optimizer rule
-	printf("In bind_replace!\n");
 	return nullptr;
 }
 

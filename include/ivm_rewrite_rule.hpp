@@ -175,8 +175,6 @@ public:
 				    printf("Middle node CB %d %s\n", i, modified_node_logical_agg->GetColumnBindings()[i].ToString().c_str());
 			    }
 
-//			    plan->children.clear();
-//			    plan->children.emplace_back(modified_node_logical_agg);
 			    printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
 			    break;
 		    }
