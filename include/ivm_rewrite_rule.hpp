@@ -169,7 +169,7 @@ public:
 			    auto mult_group_by = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
 			                                                             ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));
 			    modified_node_logical_agg->groups.emplace_back(std::move(mult_group_by));
-			    idx_t gr = modified_node_logical_agg->grouping_sets.size() + 1;
+			    idx_t gr = modified_node_logical_agg->grouping_sets[0].size();
 			    modified_node_logical_agg->grouping_sets[0].insert(gr);
 			    multiplicity_col_idx = modified_node_logical_agg->groups.size() - 1;
 			    multiplicity_table_idx = modified_node_logical_agg->group_index;
