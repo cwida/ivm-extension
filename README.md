@@ -1,3 +1,3 @@
 # ivm-extension
 
-Create incrementally maintained materialized view as `CREATE IMMV AS SELECT * FROM TABLE_X`;
+Incrementally maintain view `result` as `SELECT * from DoIVM('catalog', 'schema', 'result')`;
