@@ -57,11 +57,9 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 
 	// obtain view defintion from catalog
 	auto &catalog = Catalog::GetSystemCatalog(context);
-	OnEntryNotFound if_not_found;
 	QueryErrorContext error_context = QueryErrorContext();
 	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog_name,
-	                                           view_schema_name, view_name, if_not_found, error_context);
-	// TODO: error if view itself does not exist
+	                                           view_schema_name, view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
 	auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 
 	// generate column bindings for the view definition

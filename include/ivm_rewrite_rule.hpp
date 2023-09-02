@@ -18,6 +18,7 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/main/connection.hpp"
 
 namespace duckdb {
 
@@ -68,7 +69,22 @@ public:
 			    string delta_table_schema = child_get->GetTable().get()->schema.name;
 			    string delta_table_catalog = child_get->GetTable().get()->catalog.GetName();
 			    auto table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, delta_table_catalog,
-			                                                 delta_table_schema,delta_table, OnEntryNotFound::THROW_EXCEPTION, error_context);
+			                                                 delta_table_schema,delta_table, OnEntryNotFound::RETURN_NULL, error_context);
+			    // this is not needed, because delta table would also exist
+			    if (table_catalog_entry == nullptr) {
+				    shared_ptr<DatabaseInstance> dbinstance = context.db;
+				    Connection con(*dbinstance);
+				    string create_table_query = "CREATE TABLE " + delta_table_schema+"."+delta_table + " AS (SELECT * FROM " + child_get->GetTable().get()->name + " LIMIT 0);";
+				    printf("create table: %s", create_table_query.c_str());
+				    con.Query(create_table_query);
+				    string multiplicity_col_query = "ALTER TABLE " + delta_table_schema+"."+delta_table + " ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
+				    printf("add mult col: %s", multiplicity_col_query.c_str());
+				    con.Query(multiplicity_col_query);
+				    printf("Get entry");
+				    table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, delta_table_catalog,
+				                                            delta_table_schema,delta_table, OnEntryNotFound::THROW_EXCEPTION, error_context);
+			    }
+
 			    auto &table = table_catalog_entry->Cast<TableCatalogEntry>();
 			    unique_ptr<FunctionData> bind_data;
 			    auto scan_function = table.GetScanFunction(context, bind_data);
@@ -220,11 +236,9 @@ public:
 
 		// obtain view defintion from catalog
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		OnEntryNotFound if_not_found;
 		QueryErrorContext error_context = QueryErrorContext();
 		auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog,
-		                                           view_schema, view, if_not_found, error_context);
-		// TODO: error if view itself does not exist
+		                                           view_schema, view, OnEntryNotFound::THROW_EXCEPTION, error_context);
 		auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 		printf("View base query: %s \n", view_entry->query->ToString().c_str());
 
