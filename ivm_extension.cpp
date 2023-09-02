@@ -92,6 +92,11 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 	return;
 }
 
+string test(ClientContext &context, const FunctionParameters &parameters) {
+	printf("In pragma call\n");
+	return "create table delta_result as select * from DoIVM('memory', 's', 'result'); SELECT * FROM delta_result; ";
+}
+
 static void LoadInternal(DatabaseInstance &instance) {
 
 	// add a parser extension
@@ -116,6 +121,9 @@ static void LoadInternal(DatabaseInstance &instance) {
 	CreateTableFunctionInfo ivm_func_info(ivm_func);
 	catalog.CreateTableFunction(*con.context, &ivm_func_info);
 	con.Commit();
+
+	auto test_func = PragmaFunction::PragmaCall("test", test, {});
+	ExtensionUtil::RegisterFunction(instance, test_func);
 }
 
 void IVMExtension::Load(DuckDB &db) {
