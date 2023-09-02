@@ -3,6 +3,7 @@
 #define DUCKDB_IVM_REWRITE_RULE_HPP
 
 #include "ivm_parser.hpp"
+#include "ivm_parser_helpers.hpp"
 
 #include <utility>
 
@@ -256,6 +257,9 @@ public:
 		// Recursively modify the optimized logical plan
 		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
+
+		PlanToSQL(optimized_plan);
+
 		plan = std::move(optimized_plan);
 		return;
 	}

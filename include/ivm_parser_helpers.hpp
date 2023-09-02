@@ -6,9 +6,8 @@
 #define DUCKDB_IVM_PARSER_HELPERS_H
 
 namespace duckdb {
-std::string ExtractViewName(const string &sql);
-std::string ExtractViewQuery(string &query);
-std::string ParseViewTables(string &query);
+
+void PlanToSQL(duckdb::unique_ptr<LogicalOperator> &plan);
 
 } // namespace duckdb
 
