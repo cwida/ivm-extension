@@ -92,9 +92,9 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 	return;
 }
 
-string test(ClientContext &context, const FunctionParameters &parameters) {
+string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &parameters) {
 	printf("In pragma call\n");
-	return "create table delta_result as select * from DoIVM('memory', 's', 'result'); SELECT * FROM delta_result; ";
+	return "create table delta_test as (select * from test limit 0); alter table delta_test add column _duckdb_ivm_multiplicity bool; insert into delta_test select * from DoIVM('memory', 's', 'test'); SELECT * FROM delta_test; ";
 }
 
 static void LoadInternal(DatabaseInstance &instance) {
@@ -122,8 +122,8 @@ static void LoadInternal(DatabaseInstance &instance) {
 	catalog.CreateTableFunction(*con.context, &ivm_func_info);
 	con.Commit();
 
-	auto test_func = PragmaFunction::PragmaCall("test", test, {});
-	ExtensionUtil::RegisterFunction(instance, test_func);
+	auto upsert_delta_func = PragmaFunction::PragmaCall("upsert_delta", UpsertDeltaQueries, {});
+	ExtensionUtil::RegisterFunction(instance, upsert_delta_func);
 }
 
 void IVMExtension::Load(DuckDB &db) {

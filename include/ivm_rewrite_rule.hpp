@@ -19,6 +19,8 @@
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/main/connection.hpp"
+#include "duckdb/planner/operator/logical_insert.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
 
 namespace duckdb {
 
@@ -26,6 +28,39 @@ class IVMRewriteRule : public OptimizerExtension {
 public:
 	IVMRewriteRule() {
 		optimize_function = IVMRewriteRuleFunction;
+	}
+
+	static void AddInsertNode(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index,
+	                          idx_t &multiplicity_col_idx, idx_t &multiplicity_table_idx, optional_ptr<CatalogEntry> &table_catalog_entry) {
+		printf("\nAdd the insert node to the plan...\n");
+		printf("Plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
+
+		auto delta_table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
+		                                        "s","delta_test", OnEntryNotFound::RETURN_NULL, QueryErrorContext());
+		optional_ptr<TableCatalogEntry> table = dynamic_cast<TableCatalogEntry*>(delta_table_catalog_entry.get());
+		auto child = plan->children[0].get();
+
+		auto insert_node = make_uniq<LogicalInsert>(*table, 2002);
+		insert_node->expected_types.emplace_back(LogicalType::HUGEINT);
+		insert_node->expected_types.emplace_back(LogicalType::BIGINT);
+		insert_node->expected_types.emplace_back(LogicalType::INTEGER);
+		insert_node->expected_types.emplace_back(LogicalType::BOOLEAN);
+
+		Value v = Value(LogicalType::HUGEINT);
+		auto e1 = make_uniq<BoundConstantExpression>(std::move(v));
+		insert_node->bound_defaults.emplace_back(std::move(e1));
+		v = Value(LogicalType::BIGINT);
+		e1 = make_uniq<BoundConstantExpression>(std::move(v));
+		insert_node->bound_defaults.emplace_back(std::move(e1));
+		v = Value(LogicalType::INTEGER);
+		e1 = make_uniq<BoundConstantExpression>(std::move(v));
+		insert_node->bound_defaults.emplace_back(std::move(e1));
+		v = Value(LogicalType::BOOLEAN);
+		e1 = make_uniq<BoundConstantExpression>(std::move(v));
+		insert_node->bound_defaults.emplace_back(std::move(e1));
+
+		insert_node->children.emplace_back(std::move(plan));
+		plan = std::move(insert_node);
 	}
 
 	static void ModifyTopNode(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &multiplicity_col_idx, idx_t &multiplicity_table_idx) {
@@ -48,15 +83,14 @@ public:
 		}
 	}
 
-	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index, idx_t &multiplicity_col_idx, idx_t &multiplicity_table_idx) {
+	static void ModifyPlan(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index,
+	                       idx_t &multiplicity_col_idx, idx_t &multiplicity_table_idx, optional_ptr<CatalogEntry> &table_catalog_entry) {
 		if (!plan->children[0]->children.empty()) {
 			// Assume only one child per node
 			// TODO: Add support for modification of plan with multiple children
-			ModifyPlan(context, plan->children[0], table_index, multiplicity_col_idx, multiplicity_table_idx);
+			ModifyPlan(context, plan->children[0], table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
 		}
 
-		auto &catalog = Catalog::GetSystemCatalog(context);
-		OnEntryNotFound if_not_found;
 		QueryErrorContext error_context = QueryErrorContext();
 
 		switch (plan->children[0].get()->type) {
@@ -68,7 +102,7 @@ public:
 			    string delta_table = "delta_" + child_get->GetTable().get()->name;
 			    string delta_table_schema = child_get->GetTable().get()->schema.name;
 			    string delta_table_catalog = child_get->GetTable().get()->catalog.GetName();
-			    auto table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, delta_table_catalog,
+			    table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, delta_table_catalog,
 			                                                 delta_table_schema,delta_table, OnEntryNotFound::RETURN_NULL, error_context);
 			    if (table_catalog_entry == nullptr) {
 					// if delta base table does not exist, return error
@@ -192,7 +226,27 @@ public:
 			    break;
 		    }
 		    case LogicalOperatorType::LOGICAL_PROJECTION: {
-			    // TODO: Implement modification of projection node
+			    printf("\nIn logical projection case \n Add the multiplicity column to the second node...\n");
+			    printf("Plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
+
+			    for (int i=0;i<plan->GetColumnBindings().size(); i++) {
+				    printf("Top node CB before %d %s\n", i, plan->GetColumnBindings()[i].ToString().c_str());
+			    }
+
+			    auto projection_node = dynamic_cast<LogicalProjection*>(plan->children[0].get());
+			    printf("Plan: %s %s\n", projection_node->ToString().c_str(), projection_node->ParamsToString().c_str());
+
+			    // the table_idx used to create ColumnBinding will be that of the top node's child
+			    // the column_idx used to create ColumnBinding for multiplicity column will be stored context from the child node
+			    auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
+			                                                 ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));
+			    printf("Add mult column to exp\n");
+			    projection_node->expressions.emplace_back(std::move(e));
+
+			    printf("Modified plan: %s %s\n", projection_node->ToString().c_str(), projection_node->ParamsToString().c_str());
+			    for (int i=0;i<projection_node->GetColumnBindings().size(); i++) {
+				    printf("Top node CB %d %s\n", i, projection_node->GetColumnBindings()[i].ToString().c_str());
+			    }
 			    break;
 		    }
 		    default:
@@ -202,16 +256,20 @@ public:
 
 	static void IVMRewriteRuleFunction(ClientContext &context, OptimizerExtensionInfo *info,
 	                                   duckdb::unique_ptr<LogicalOperator> &plan) {
-		printf("In the optimize function\n");
+		printf("In the optimize function, plan:\n");
+		printf("%s\n",plan->ToString().c_str());
 
 		if (plan->children.size() == 0) {
 			return;
 		}
 
 		// check if plan contains table function `DoIVM`
-		// The query to trigger IVM will be of the form `SELECT * from DoIVM('view_name');`
-		// so, the plan's single child should be the DOIVM table function
-		auto child = plan->children[0].get();
+		// The query to trigger IVM will be of the form `CREATE TABLE delta_view_name AS SELECT * from DoIVM('view_name');`
+		// The plan's last child should be the DoIVM table function
+		auto child = plan.get();
+		while (!child->children.empty()) {
+			child = child->children[0].get();
+		}
 		if (child->GetName() != "DOIVM") {
 			return;
 		}
@@ -226,20 +284,21 @@ public:
 		idx_t table_index = 2000;
 
 		// obtain view defintion from catalog
-		auto &catalog = Catalog::GetSystemCatalog(context);
 		QueryErrorContext error_context = QueryErrorContext();
-		auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog,
+		auto view_catalog_entry = Catalog::GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog,
 		                                           view_schema, view, OnEntryNotFound::THROW_EXCEPTION, error_context);
 		auto view_entry = dynamic_cast<ViewCatalogEntry*>(view_catalog_entry.get());
 		printf("View base query: %s \n", view_entry->query->ToString().c_str());
 
+		if (view_entry->query->type != StatementType::SELECT_STATEMENT) {
+			throw NotImplementedException("Only select queries in view definition supported");
+		}
+
 		// generate the optimized logical plan
+		string augmented_view_query = "INSERT INTO delta_"+ view + " "+ view_entry->query->ToString();
 		Parser parser;
 		parser.ParseQuery(view_entry->query->ToString());
 		auto statement = parser.statements[0].get();
-		if (statement->type != StatementType::SELECT_STATEMENT) {
-			throw NotImplementedException("Only select queries in view definition supported");
-		}
 		Planner planner(context);
 		planner.CreatePlan(statement->Copy());
 		Optimizer optimizer((Binder&)planner.binder, context);
@@ -252,10 +311,14 @@ public:
 		// for ex. parent.children[0] will not contain column names to find the index of the multiplicity column
 		idx_t multiplicity_col_idx;
 		idx_t multiplicity_table_idx;
+		optional_ptr<CatalogEntry> table_catalog_entry = nullptr;
 
 		// Recursively modify the optimized logical plan
-		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx);
+		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
+		AddInsertNode(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
+		auto x = dynamic_cast<LogicalInsert*>(optimized_plan.get());
+		printf("create node: %s\n", x->ToString().c_str());
 		plan = std::move(optimized_plan);
 		return;
 	}
