@@ -50,7 +50,7 @@ public:
 			exp = make_uniq<BoundConstantExpression>(std::move(value));
 			insert_node->bound_defaults.emplace_back(std::move(exp));
 		}
-		
+
 		// insert the insert node at the top of the plan
 		insert_node->children.emplace_back(std::move(plan));
 		plan = std::move(insert_node);
@@ -243,7 +243,7 @@ public:
 			    break;
 		    }
 		    default:
-			    throw NotImplementedException("Operator type %s not supported", LogicalOperatorToString(plan->type));
+			    throw NotImplementedException("Operator type %s not supported", LogicalOperatorToString(plan->children[0].get()->type));
 		}
 	}
 
@@ -309,8 +309,6 @@ public:
 		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
 		AddInsertNode(context, optimized_plan, table_index, view, view_catalog, view_schema);
-		auto x = dynamic_cast<LogicalInsert*>(optimized_plan.get());
-		printf("create node: %s\n", x->ToString().c_str());
 		plan = std::move(optimized_plan);
 		return;
 	}
