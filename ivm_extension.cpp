@@ -99,7 +99,7 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 
 	string query_create_view_delta_table = "CREATE TABLE delta_"+view_name+" AS (SELECT * FROM "+view_name+" LIMIT 0);";
 	string query_add_multiplicity_col = "ALTER TABLE delta_"+view_name+" ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
-	string ivm_query = "SELECT * from DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');";
+	string ivm_query = "INSERT INTO delta_"+view_name+" SELECT * from DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');";
 	string select_query = "SELECT * FROM delta_"+view_name+";";
 	string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query + select_query;
 	return query;

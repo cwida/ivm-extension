@@ -305,7 +305,6 @@ public:
 		}
 
 		// generate the optimized logical plan
-		string augmented_view_query = "INSERT INTO delta_"+ view + " "+ view_entry->query->ToString();
 		Parser parser;
 		parser.ParseQuery(view_entry->query->ToString());
 		auto statement = parser.statements[0].get();
