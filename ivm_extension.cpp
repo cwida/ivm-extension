@@ -103,7 +103,10 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	string select_query = "SELECT * FROM delta_"+view_name+";";
 	string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query + select_query;
 	return query;
-	return "create table delta_test as (select * from test limit 0); alter table delta_test add column _duckdb_ivm_multiplicity bool; insert into delta_test select * from DoIVM('memory', 's', 'test'); SELECT * FROM delta_test; ";
+	// create table delta_test as (select * from test limit 0);
+	// alter table delta_test add column _duckdb_ivm_multiplicity bool;
+	// insert into delta_test select * from DoIVM('memory', 's', 'test');
+	// SELECT * FROM delta_test;
 }
 
 static void LoadInternal(DatabaseInstance &instance) {

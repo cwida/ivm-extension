@@ -50,24 +50,7 @@ public:
 			exp = make_uniq<BoundConstantExpression>(std::move(value));
 			insert_node->bound_defaults.emplace_back(std::move(exp));
 		}
-//		insert_node->expected_types.emplace_back(LogicalType::HUGEINT);
-//		insert_node->expected_types.emplace_back(LogicalType::BIGINT);
-//		insert_node->expected_types.emplace_back(LogicalType::INTEGER);
-//		insert_node->expected_types.emplace_back(LogicalType::BOOLEAN);
-//
-//		Value v = Value(LogicalType::HUGEINT);
-//		auto e1 = make_uniq<BoundConstantExpression>(std::move(v));
-//		insert_node->bound_defaults.emplace_back(std::move(e1));
-//		v = Value(LogicalType::BIGINT);
-//		e1 = make_uniq<BoundConstantExpression>(std::move(v));
-//		insert_node->bound_defaults.emplace_back(std::move(e1));
-//		v = Value(LogicalType::INTEGER);
-//		e1 = make_uniq<BoundConstantExpression>(std::move(v));
-//		insert_node->bound_defaults.emplace_back(std::move(e1));
-//		v = Value(LogicalType::BOOLEAN);
-//		e1 = make_uniq<BoundConstantExpression>(std::move(v));
-//		insert_node->bound_defaults.emplace_back(std::move(e1));
-
+		
 		// insert the insert node at the top of the plan
 		insert_node->children.emplace_back(std::move(plan));
 		plan = std::move(insert_node);
