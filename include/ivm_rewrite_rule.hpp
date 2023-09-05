@@ -31,34 +31,45 @@ public:
 	}
 
 	static void AddInsertNode(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &table_index,
-	                          idx_t &multiplicity_col_idx, idx_t &multiplicity_table_idx, optional_ptr<CatalogEntry> &table_catalog_entry) {
+	                          string &view_name, string &view_catalog_name, string &view_schema_name) {
 		printf("\nAdd the insert node to the plan...\n");
 		printf("Plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
 
-		auto delta_table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, "memory",
-		                                        "s","delta_test", OnEntryNotFound::RETURN_NULL, QueryErrorContext());
+		auto delta_table_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name,
+		                                        view_schema_name,"delta_"+view_name, OnEntryNotFound::RETURN_NULL, QueryErrorContext());
 		optional_ptr<TableCatalogEntry> table = dynamic_cast<TableCatalogEntry*>(delta_table_catalog_entry.get());
-		auto child = plan->children[0].get();
+		// create insert node. It is new node, hence it gets a new table_idx
+		auto insert_node = make_uniq<LogicalInsert>(*table, table_index += 1);
 
-		auto insert_node = make_uniq<LogicalInsert>(*table, 2002);
-		insert_node->expected_types.emplace_back(LogicalType::HUGEINT);
-		insert_node->expected_types.emplace_back(LogicalType::BIGINT);
-		insert_node->expected_types.emplace_back(LogicalType::INTEGER);
-		insert_node->expected_types.emplace_back(LogicalType::BOOLEAN);
+		// generate bindings for the insert node using the child node
+		auto plan_top_node = plan.get();
+		Value value;
+		unique_ptr<BoundConstantExpression> exp;
+		for (int i=0;i<plan->expressions.size();i++) {
+			insert_node->expected_types.emplace_back(plan->expressions[i]->return_type);
+			value = Value(plan->expressions[i]->return_type);
+			exp = make_uniq<BoundConstantExpression>(std::move(value));
+			insert_node->bound_defaults.emplace_back(std::move(exp));
+		}
+//		insert_node->expected_types.emplace_back(LogicalType::HUGEINT);
+//		insert_node->expected_types.emplace_back(LogicalType::BIGINT);
+//		insert_node->expected_types.emplace_back(LogicalType::INTEGER);
+//		insert_node->expected_types.emplace_back(LogicalType::BOOLEAN);
+//
+//		Value v = Value(LogicalType::HUGEINT);
+//		auto e1 = make_uniq<BoundConstantExpression>(std::move(v));
+//		insert_node->bound_defaults.emplace_back(std::move(e1));
+//		v = Value(LogicalType::BIGINT);
+//		e1 = make_uniq<BoundConstantExpression>(std::move(v));
+//		insert_node->bound_defaults.emplace_back(std::move(e1));
+//		v = Value(LogicalType::INTEGER);
+//		e1 = make_uniq<BoundConstantExpression>(std::move(v));
+//		insert_node->bound_defaults.emplace_back(std::move(e1));
+//		v = Value(LogicalType::BOOLEAN);
+//		e1 = make_uniq<BoundConstantExpression>(std::move(v));
+//		insert_node->bound_defaults.emplace_back(std::move(e1));
 
-		Value v = Value(LogicalType::HUGEINT);
-		auto e1 = make_uniq<BoundConstantExpression>(std::move(v));
-		insert_node->bound_defaults.emplace_back(std::move(e1));
-		v = Value(LogicalType::BIGINT);
-		e1 = make_uniq<BoundConstantExpression>(std::move(v));
-		insert_node->bound_defaults.emplace_back(std::move(e1));
-		v = Value(LogicalType::INTEGER);
-		e1 = make_uniq<BoundConstantExpression>(std::move(v));
-		insert_node->bound_defaults.emplace_back(std::move(e1));
-		v = Value(LogicalType::BOOLEAN);
-		e1 = make_uniq<BoundConstantExpression>(std::move(v));
-		insert_node->bound_defaults.emplace_back(std::move(e1));
-
+		// insert the insert node at the top of the plan
 		insert_node->children.emplace_back(std::move(plan));
 		plan = std::move(insert_node);
 	}
@@ -316,7 +327,7 @@ public:
 		// Recursively modify the optimized logical plan
 		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
-		AddInsertNode(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
+		AddInsertNode(context, optimized_plan, table_index, view, view_catalog, view_schema);
 		auto x = dynamic_cast<LogicalInsert*>(optimized_plan.get());
 		printf("create node: %s\n", x->ToString().c_str());
 		plan = std::move(optimized_plan);
