@@ -41,8 +41,7 @@ public:
 		// create insert node. It is new node, hence it gets a new table_idx
 		auto insert_node = make_uniq<LogicalInsert>(*table, table_index += 1);
 
-		// generate bindings for the insert node using the child node
-		auto plan_top_node = plan.get();
+		// generate bindings for the insert node using the top node of the plan
 		Value value;
 		unique_ptr<BoundConstantExpression> exp;
 		for (int i=0;i<plan->expressions.size();i++) {

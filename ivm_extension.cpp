@@ -93,7 +93,16 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 }
 
 string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &parameters) {
-	printf("In pragma call\n");
+	string view_catalog_name = StringValue::Get(parameters.values[0]);
+	string view_schema_name = StringValue::Get(parameters.values[1]);
+	string view_name = StringValue::Get(parameters.values[2]);
+
+	string query_create_view_delta_table = "CREATE TABLE delta_"+view_name+" AS (SELECT * FROM "+view_name+" LIMIT 0);";
+	string query_add_multiplicity_col = "ALTER TABLE delta_"+view_name+" ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
+	string ivm_query = "SELECT * from DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');";
+	string select_query = "SELECT * FROM delta_"+view_name+";";
+	string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query + select_query;
+	return query;
 	return "create table delta_test as (select * from test limit 0); alter table delta_test add column _duckdb_ivm_multiplicity bool; insert into delta_test select * from DoIVM('memory', 's', 'test'); SELECT * FROM delta_test; ";
 }
 
@@ -122,7 +131,8 @@ static void LoadInternal(DatabaseInstance &instance) {
 	catalog.CreateTableFunction(*con.context, &ivm_func_info);
 	con.Commit();
 
-	auto upsert_delta_func = PragmaFunction::PragmaCall("upsert_delta", UpsertDeltaQueries, {});
+	auto upsert_delta_func = PragmaFunction::PragmaCall("ivm_upsert", UpsertDeltaQueries,
+	                                                    {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR});
 	ExtensionUtil::RegisterFunction(instance, upsert_delta_func);
 }
 
