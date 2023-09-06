@@ -21,6 +21,7 @@
 #include "duckdb/main/connection.hpp"
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/operator/logical_filter.hpp"
 
 namespace duckdb {
 
@@ -123,6 +124,7 @@ public:
 			                                                      std::move(bind_data), std::move(return_types),
 			                                                      std::move(return_names));
 			    replacement_get_node->column_ids = std::move(column_ids);
+			    replacement_get_node->table_filters = std::move(child_get->table_filters);
 
 			    for (int i=0;i<replacement_get_node.get()->GetColumnBindings().size(); i++) {
 				    printf("Replacement node CB %d %s\n", i, replacement_get_node.get()->GetColumnBindings()[i].ToString().c_str());
@@ -240,6 +242,28 @@ public:
 			    for (int i=0;i<projection_node->GetColumnBindings().size(); i++) {
 				    printf("Top node CB %d %s\n", i, projection_node->GetColumnBindings()[i].ToString().c_str());
 			    }
+			    break;
+		    }
+		    case LogicalOperatorType::LOGICAL_FILTER: {
+			    break;
+			    printf("In filter node modification\n");
+			    auto filter_node = dynamic_cast<LogicalFilter*>(plan->children[0].get());
+			    auto expression = filter_node->expressions[0].get()->Copy();
+			    auto replacement_filter_node = make_uniq<LogicalFilter>(std::move(expression));
+			    replacement_filter_node->children.emplace_back(filter_node->children[0].get());
+			    plan->children.clear();
+			    plan->children.emplace_back(std::move(replacement_filter_node));
+//			    auto node = dynamic_cast<LogicalFilter*>(plan->children[0].get());
+//			    node->projection_map.emplace_back(node->projection_map.size());
+//			    multiplicity_col_idx = 3;
+//			    node->GetColumnBindings();
+//			    for (int i=0;i<node->GetColumnBindings().size(); i++) {
+//				    printf("Filter node CB before %d %s\n", i, node->GetColumnBindings()[i].ToString().c_str());
+//			    }
+//			    node->projection_map.emplace_back(node->projection_map.size());
+//			    for (int i=0;i<node->GetColumnBindings().size(); i++) {
+//				    printf("Filter node CB after %d %s\n", i, node->GetColumnBindings()[i].ToString().c_str());
+//			    }
 			    break;
 		    }
 		    default:
