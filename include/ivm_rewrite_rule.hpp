@@ -200,7 +200,11 @@ public:
 			}
 		    case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
 
-			    auto modified_node_logical_agg = dynamic_cast<LogicalAggregate*>(plan->children[0].get()); // dynamic_cast<LogicalAggregate*>(modified_plan.operator->());
+			    auto modified_node_logical_agg = dynamic_cast<LogicalAggregate*>(plan->children[0].get());
+			    for (int i=0;i<modified_node_logical_agg->GetColumnBindings().size(); i++) {
+				    printf("aggregate node CB before %d %s\n", i, modified_node_logical_agg->GetColumnBindings()[i].ToString().c_str());
+			    }
+
 			    printf("Aggregate index: %llu Group index: %llu\n", modified_node_logical_agg->aggregate_index, modified_node_logical_agg->group_index);
 			    auto mult_group_by = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
 			                                                             ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));
@@ -214,7 +218,7 @@ public:
 			    multiplicity_col_idx = modified_node_logical_agg->groups.size() - 1;
 			    multiplicity_table_idx = modified_node_logical_agg->group_index;
 			    for (int i=0;i<modified_node_logical_agg->GetColumnBindings().size(); i++) {
-				    printf("Middle node CB %d %s\n", i, modified_node_logical_agg->GetColumnBindings()[i].ToString().c_str());
+				    printf("aggregate node CB after %d %s\n", i, modified_node_logical_agg->GetColumnBindings()[i].ToString().c_str());
 			    }
 
 			    printf("Modified plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
@@ -245,25 +249,8 @@ public:
 			    break;
 		    }
 		    case LogicalOperatorType::LOGICAL_FILTER: {
-			    break;
-			    printf("In filter node modification\n");
 			    auto filter_node = dynamic_cast<LogicalFilter*>(plan->children[0].get());
-			    auto expression = filter_node->expressions[0].get()->Copy();
-			    auto replacement_filter_node = make_uniq<LogicalFilter>(std::move(expression));
-			    replacement_filter_node->children.emplace_back(filter_node->children[0].get());
-			    plan->children.clear();
-			    plan->children.emplace_back(std::move(replacement_filter_node));
-//			    auto node = dynamic_cast<LogicalFilter*>(plan->children[0].get());
-//			    node->projection_map.emplace_back(node->projection_map.size());
-//			    multiplicity_col_idx = 3;
-//			    node->GetColumnBindings();
-//			    for (int i=0;i<node->GetColumnBindings().size(); i++) {
-//				    printf("Filter node CB before %d %s\n", i, node->GetColumnBindings()[i].ToString().c_str());
-//			    }
-//			    node->projection_map.emplace_back(node->projection_map.size());
-//			    for (int i=0;i<node->GetColumnBindings().size(); i++) {
-//				    printf("Filter node CB after %d %s\n", i, node->GetColumnBindings()[i].ToString().c_str());
-//			    }
+			    filter_node->projection_map.clear();
 			    break;
 		    }
 		    default:
