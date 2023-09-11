@@ -5,7 +5,6 @@
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/group_by_node.hpp"
-#include "duckdb/parser/tableref.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 
