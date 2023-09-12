@@ -33,6 +33,12 @@ void OptimizedQueryPlan(ClientContext &context, string &catalog, string &schema,
 }
 
 string DeltaMaterializedViewQuery(ClientContext &context, string &catalog, string &schema, string &view) {
+	// create table `materialized_view` only if it does not exist
+	auto view_catalog_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, catalog,
+	                                            schema, "materialized_"+view, OnEntryNotFound::RETURN_NULL, QueryErrorContext());
+	if (view_catalog_entry != nullptr){
+		return "";
+	}
 
 	duckdb::unique_ptr<LogicalOperator> plan;
 	OptimizedQueryPlan(context, catalog, schema, view, plan);
@@ -73,7 +79,10 @@ string DeltaMaterializedViewQuery(ClientContext &context, string &catalog, strin
 		child = child->children[0].get();
 	}
 
+	grouping_cols.emplace_back("_duckdb_ivm_multiplicity");
+
 	// if no grouping found, then introduce ID column
+//	TODO: grouping col will always be found bc multiplicity col will always be part of that
 	string unique_constraint;
 	if (grouping_cols.empty()) {
 		unique_constraint = "UNIQUE (ID)";
@@ -85,7 +94,7 @@ string DeltaMaterializedViewQuery(ClientContext &context, string &catalog, strin
 		unique_constraint+=")";
 	}
 
-	string delta_materialized_view_query = "CREATE TABLE delta_"+view+" (";
+	string delta_materialized_view_query = "CREATE TABLE materialized_"+view+" (";
 	for (int i=0;i<col_names.size();i++) {
 		delta_materialized_view_query+="\""+col_names[i]+"\""+" "+col_types[i].ToString()+", ";
 	}

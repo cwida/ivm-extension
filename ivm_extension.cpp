@@ -98,17 +98,21 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	string view_schema_name = StringValue::Get(parameters.values[1]);
 	string view_name = StringValue::Get(parameters.values[2]);
 
-	string query_create_view_delta_table = DeltaMaterializedViewQuery(context, view_catalog_name, view_schema_name, view_name);
-	    // "CREATE TABLE delta_"+view_name+" AS (SELECT * FROM "+view_name+" LIMIT 0);";
-	string query_add_multiplicity_col = "";//"ALTER TABLE delta_"+view_name+" ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
+	string materialized_view_query = DeltaMaterializedViewQuery(context, view_catalog_name, view_schema_name, view_name);
+	string query_create_view_delta_table = "CREATE TABLE delta_"+view_name+" AS (SELECT * FROM "+view_name+" LIMIT 0);";
+	string query_add_multiplicity_col = "ALTER TABLE delta_"+view_name+" ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
 	string ivm_query = "INSERT INTO delta_"+view_name+" SELECT * from DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');";
 	string select_query = "SELECT * FROM delta_"+view_name+";";
-	string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query + select_query;
+//	string upsert_query = "INSERT INTO materialized_"+view_name+" SELECT * FROM delta_"+view_name+" ON CONFLICT(b, d, _duckdb_ivm_multiplicity) SET ";
+//	string upsert_query_2 = "";
+	string query = materialized_view_query + query_create_view_delta_table + query_add_multiplicity_col + ivm_query + select_query;
 	return query;
 	// create table delta_test as (select * from test limit 0);
 	// alter table delta_test add column _duckdb_ivm_multiplicity bool;
 	// insert into delta_test select * from DoIVM('memory', 's', 'test');
 	// SELECT * FROM delta_test;
+	// TODO: Complete this comment
+	// INSERT INTO materialized_view SELECT * FROM delta_view ON CONFLICT(a,b) SET
 }
 
 static void LoadInternal(DatabaseInstance &instance) {
