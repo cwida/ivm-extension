@@ -58,6 +58,9 @@ public:
 	}
 
 	static void ModifyTopNode(ClientContext &context, unique_ptr<LogicalOperator> &plan, idx_t &multiplicity_col_idx, idx_t &multiplicity_table_idx) {
+		if (plan->type != LogicalOperatorType::LOGICAL_PROJECTION) {
+			throw NotImplementedException("Assumption being made: top node has to be projection node");
+		}
 		printf("\nAdd the multiplicity column to the top node...\n");
 		printf("Plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
 		for (int i=0;i<plan->GetColumnBindings().size(); i++) {
@@ -213,8 +216,13 @@ public:
 			    auto mult_group_by_stats = make_uniq<BaseStatistics>(BaseStatistics::CreateUnknown(LogicalType::BOOLEAN));
 			    modified_node_logical_agg->group_stats.emplace_back(std::move(mult_group_by_stats));
 
-			    idx_t gr = modified_node_logical_agg->grouping_sets[0].size();
-			    modified_node_logical_agg->grouping_sets[0].insert(gr);
+			    if (modified_node_logical_agg->grouping_sets.empty()){
+				    modified_node_logical_agg->grouping_sets = {{0}};
+			    } else {
+				    idx_t gr = modified_node_logical_agg->grouping_sets[0].size();
+				    modified_node_logical_agg->grouping_sets[0].insert(gr);
+			    }
+
 			    multiplicity_col_idx = modified_node_logical_agg->groups.size() - 1;
 			    multiplicity_table_idx = modified_node_logical_agg->group_index;
 			    for (int i=0;i<modified_node_logical_agg->GetColumnBindings().size(); i++) {
@@ -315,6 +323,10 @@ public:
 		idx_t multiplicity_col_idx;
 		idx_t multiplicity_table_idx;
 		optional_ptr<CatalogEntry> table_catalog_entry = nullptr;
+
+		if (optimized_plan->children.empty()) {
+			throw NotImplementedException("Plan contains single node, this is not supported");
+		}
 
 		// Recursively modify the optimized logical plan
 		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx, table_catalog_entry);
