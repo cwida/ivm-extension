@@ -1,6 +1,6 @@
-# name: test/ivm/ivm_groupby.test
+# name: extension/ivm-extension/tests/ivm_groupby.test
 # description: Test aggregation/group by statements
-# group: [ivm]
+# group: [tests]
 
 require ivm
 
