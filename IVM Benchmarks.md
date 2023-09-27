@@ -14,7 +14,5 @@ Query 2 execution time: 41s (warm cache)
 - delete from lineitem where l_linenumber < 2; -- 10.65s
 - SELECT * FROM LINEITEM_TEST -- 22s
 
-
-
 #### DuckDB with IVM
 

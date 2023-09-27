@@ -189,7 +189,7 @@ public:
 			vector<unique_ptr<Expression>> select_list;
 			for (int i = 0; i < child_get->column_ids.size(); i++) {
 #ifdef DEBUG
-				printf("Create column mapping: %s, %llu", child_get->names[child_get->column_ids[i]].c_str(),
+				printf("Create column mapping: %s, %lu", child_get->names[child_get->column_ids[i]].c_str(),
 				       child_get->column_ids[i]);
 #endif
 				auto col = make_uniq<BoundColumnRefExpression>(child_get->names[child_get->column_ids[i]],

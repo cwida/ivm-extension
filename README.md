@@ -12,7 +12,7 @@ This extension assumes that changes to base table `hello` are present in delta t
 First create the base table and the view:
 ```SQL
 CREATE TABLE hello(a INTEGER, b INTEGER , c VARCHAR);
-CREATE VIEW result AS (SELECT sum(a), count(c), b FROM hello GROUP BY b);
+CREATE MATERIALIZED VIEW result AS (SELECT sum(a), count(c), b FROM hello GROUP BY b);
 ```
 
 Create `delta_hello`:

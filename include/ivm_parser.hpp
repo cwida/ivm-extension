@@ -1,5 +1,4 @@
 #include "duckdb.hpp"
-#include "ivm_parser_helpers.hpp"
 
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/function/pragma_function.hpp"
@@ -54,10 +53,6 @@ struct IVMOperatorExtension : public OperatorExtension {
 	std::string GetName() override {
 		return "ivm";
 	}
-
-	unique_ptr<LogicalExtensionOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader) override {
-		throw InternalException("prql operator should not be serialized");
-	}
 };
 
 struct IVMParseData : ParserExtensionParseData {
@@ -86,7 +81,7 @@ public:
 class IVMFunction : public TableFunction {
 public:
 	IVMFunction() {
-		name = "quack quack";
+		name = "IVM function";
 		arguments.push_back(LogicalType::BIGINT);
 		bind = IVMBind;
 		init_global = IVMInit;
