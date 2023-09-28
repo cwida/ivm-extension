@@ -7,18 +7,11 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "ivm_parser.hpp"
 
-// whatever
-#include <signal.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/types.h>
-#include <arpa/inet.h>
 
 namespace duckdb {
 

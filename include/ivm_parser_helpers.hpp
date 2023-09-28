@@ -1,3 +1,5 @@
+#pragma once
+
 #include "duckdb.hpp"
 
 #ifndef DUCKDB_IVM_PARSER_HELPERS_H

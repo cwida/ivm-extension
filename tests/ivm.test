@@ -1,0 +1,152 @@
+# name: test/ivm/ivm.test
+# description:
+# group: [ivm]
+
+require ivm
+
+statement ok
+create schema s;
+
+statement ok
+use memory.s;
+
+statement ok
+CREATE TABLE hello(a INTEGER, b varchar, c varchar);
+
+statement ok
+INSERT INTO hello VALUES (3, 'true', 'blah'), (4, 'false', 'foo');
+
+statement ok
+Create table delta_hello as (select * from hello limit 0);
+
+statement ok
+Alter table delta_hello add column _duckdb_ivm_multiplicity bool;
+
+statement ok
+INSERT INTO delta_hello VALUES (1,'k', 'Mark',true), (2,'k', 'Hannes',false);
+
+statement ok
+CREATE VIEW test AS (SELECT * FROM hello);
+
+query IIII
+pragma ivm_upsert('memory', 's', 'test');
+----
+1	k	Mark	true
+2	k	Hannes	false
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+INSERT INTO delta_hello VALUES (5, 'true', 'Kriti', true);
+
+statement ok
+CREATE VIEW test AS (SELECT sum(a), count(c), b FROM hello WHERE b = 'true' GROUP BY b);
+
+query IIII
+pragma ivm_upsert('memory', 's', 'test');
+----
+5	1	true	true
+
+statement ok
+DELETE FROM delta_hello WHERE a=5;
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT sum(a), count(c), b FROM hello WHERE b = 'true' GROUP BY b);
+
+statement ok
+pragma ivm_upsert('memory', 's', 'test');
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT sum(a), count(c), b FROM hello GROUP BY b);
+
+query IIII
+pragma ivm_upsert('memory', 's', 'test');
+----
+1	1	k	true
+2	1	k	false
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT a, b FROM hello);
+
+query III
+pragma ivm_upsert('memory', 's', 'test');
+----
+1	k	true
+2	k	false
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT a, b FROM hello WHERE a>0);
+
+query III
+pragma ivm_upsert('memory', 's', 'test');
+----
+1	k	true
+2	k	false
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT a, b FROM hello WHERE a>0 AND c='Hannes');
+
+statement error
+pragma ivm_upsert('memory', 's', 'test');
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT a, b FROM hello WHERE a>0 AND c='foo');
+
+query III
+pragma ivm_upsert('memory', 's', 'test');
+----
+
+statement ok
+DROP VIEW test;
+
+statement ok
+DROP TABLE delta_test;
+
+statement ok
+CREATE VIEW test AS (SELECT sum(a), count(c) FROM hello);
+
+query III
+pragma ivm_upsert('memory', 's', 'test');
+----
+1	1	true
+2	1	false
