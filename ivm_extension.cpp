@@ -1,6 +1,6 @@
 #define DUCKDB_EXTENSION_MAIN
 
-#include "include/ivm_extension.hpp"
+#include "ivm_extension.hpp"
 
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
@@ -17,8 +17,8 @@
 #include "duckdb/parser/tableref/basetableref.hpp"
 #include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/planner/planner.hpp"
-#include "include/ivm_parser.hpp"
-#include "include/ivm_rewrite_rule.hpp"
+#include "ivm_parser.hpp"
+#include "ivm_rewrite_rule.hpp"
 
 #include <map>
 #include <stdio.h>

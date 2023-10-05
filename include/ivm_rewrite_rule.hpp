@@ -2,26 +2,25 @@
 #ifndef DUCKDB_IVM_REWRITE_RULE_HPP
 #define DUCKDB_IVM_REWRITE_RULE_HPP
 
+#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+#include "duckdb/main/connection.hpp"
+#include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/parser/parser.hpp"
+#include "duckdb/parser/tableref/basetableref.hpp"
+#include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/operator/logical_aggregate.hpp"
+#include "duckdb/planner/operator/logical_filter.hpp"
+#include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_insert.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
+#include "duckdb/planner/planner.hpp"
+#include "duckdb/planner/tableref/bound_basetableref.hpp"
 #include "ivm_parser.hpp"
 
+#include <iostream>
 #include <utility>
-
-#include "duckdb.hpp"
-#include "duckdb/parser/parser.hpp"
-#include "duckdb/planner/planner.hpp"
-#include "duckdb/optimizer/optimizer.hpp"
-#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
-#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
-#include "duckdb/parser/tableref/basetableref.hpp"
-#include "duckdb/planner/tableref/bound_basetableref.hpp"
-#include "duckdb/planner/expression.hpp"
-#include "duckdb/planner/operator/logical_projection.hpp"
-#include "duckdb/planner/operator/logical_aggregate.hpp"
-#include "duckdb/planner/operator/logical_get.hpp"
-#include "duckdb/main/connection.hpp"
-#include "duckdb/planner/operator/logical_insert.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/operator/logical_filter.hpp"
 
 namespace duckdb {
 
@@ -77,6 +76,9 @@ public:
 		// the table_idx used to create ColumnBinding will be that of the top node's child
 		// the column_idx used to create ColumnBinding for multiplicity column will be stored context from the child
 		// node
+		// [commented lines by ila]
+		// multiplicity_table_idx = plan->children[0]->GetTableIndex()[0];
+		// multiplicity_col_idx = plan->children[0]->GetColumnBindings().size() - 1;
 		auto e = make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
 		                                             ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));
 		plan->expressions.emplace_back(std::move(e));
@@ -189,7 +191,7 @@ public:
 			vector<unique_ptr<Expression>> select_list;
 			for (int i = 0; i < child_get->column_ids.size(); i++) {
 #ifdef DEBUG
-				printf("Create column mapping: %s, %lu", child_get->names[child_get->column_ids[i]].c_str(),
+				printf("Create column mapping: %s, %llu", child_get->names[child_get->column_ids[i]].c_str(),
 				       child_get->column_ids[i]);
 #endif
 				auto col = make_uniq<BoundColumnRefExpression>(child_get->names[child_get->column_ids[i]],
@@ -241,6 +243,8 @@ public:
 			printf("Aggregate index: %llu Group index: %llu\n", modified_node_logical_agg->aggregate_index,
 			       modified_node_logical_agg->group_index);
 #endif
+			// ila
+			// multiplicity_table_idx = modified_node_logical_agg->children[0]->GetTableIndex()[0];
 			auto mult_group_by =
 			    make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
 			                                        ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));
@@ -305,7 +309,7 @@ public:
 
 	static void IVMRewriteRuleFunction(ClientContext &context, OptimizerExtensionInfo *info,
 	                                   duckdb::unique_ptr<LogicalOperator> &plan) {
-		if (plan->children.size() == 0) {
+		if (plan->children.empty()) {
 			return;
 		}
 
@@ -316,7 +320,7 @@ public:
 		while (!child->children.empty()) {
 			child = child->children[0].get();
 		}
-		if (child->GetName() != "DOIVM") {
+		if (child->GetName().substr(0, 5) != "DOIVM") {
 			return;
 		}
 
@@ -331,7 +335,7 @@ public:
 
 		idx_t table_index = 2000;
 
-		// obtain view defintion from catalog
+		// obtain view definition from catalog
 		QueryErrorContext error_context = QueryErrorContext();
 		auto view_catalog_entry = Catalog::GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog, view_schema, view,
 		                                            OnEntryNotFound::THROW_EXCEPTION, error_context);
@@ -345,15 +349,23 @@ public:
 		}
 
 		// generate the optimized logical plan
+		Connection con(*context.db);
+		con.BeginTransaction();
+		con.Query("SET disabled_optimizers='compressed_materialization, statistics_propagation, expression_rewriter';");
+		con.Commit();
+
 		Parser parser;
+		Planner planner(context);
+
 		parser.ParseQuery(view_entry->query->ToString());
 		auto statement = parser.statements[0].get();
-		Planner planner(context);
+
 		planner.CreatePlan(statement->Copy());
-		Optimizer optimizer((Binder &)planner.binder, context);
+
+		Optimizer optimizer(*planner.binder, context);
 		auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
 #ifdef DEBUG
-		printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
+		printf("Optimized plan: \n%s\n", optimized_plan->ToString().c_str());
 #endif
 
 		// variable to store the column_idx for multiplicity column at each node
@@ -368,11 +380,12 @@ public:
 			throw NotImplementedException("Plan contains single node, this is not supported");
 		}
 
-		// Recursively modify the optimized logical plan
+		// recursively modify the optimized logical plan
 		ModifyPlan(context, optimized_plan, table_index, multiplicity_col_idx, multiplicity_table_idx,
 		           table_catalog_entry);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
 		AddInsertNode(context, optimized_plan, table_index, view, view_catalog, view_schema);
+		std::cout << "FINAL PLAN:\n" << optimized_plan->ToString() << std::endl;
 		plan = std::move(optimized_plan);
 		return;
 	}
