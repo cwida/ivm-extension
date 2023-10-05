@@ -12,14 +12,14 @@ This extension assumes that changes to base table `hello` are present in delta t
 First create the base table and the view:
 ```SQL
 CREATE TABLE hello(a INTEGER, b INTEGER , c VARCHAR);
-CREATE VEW result AS (SELECT sum(a), count(c), b FROM hello GROUP BY b);
+CREATE VIEW result AS (SELECT count(a) as my_count, sum(a) as my_sum, b FROM hello GROUP BY b);
 ```
 
 Create `delta_hello`:
 ```SQL
 CREATE TABLE delta_hello AS (SELECT * FROM hello LIMIT 0);
 ALTER TABLE delta_hello ADD COLUMN _duckdb_ivm_multiplicity BOOL;
-INSERT INTO delta_hello VALUES (1,1, 'Mark',true), (2,2, 'Hannes',false), (3,1, 'Kriti',true), (4,1, 'Peter',false);
+INSERT INTO delta_hello VALUES (1, 1, 'Mark', true), (2, 2, 'Hannes', false), (3, 1, 'Kriti', true), (4, 1, 'Peter', false);
 ```
 **NOTE**: The extension assumes the presence of the delta base table `delta_hello`.
 

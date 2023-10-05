@@ -1,6 +1,6 @@
-# name: test/ivm/ivm.test
-# description:
-# group: [ivm]
+# name: extension/ivm/tests/ivm.test
+# description: 
+# group: [tests]
 
 require ivm
 

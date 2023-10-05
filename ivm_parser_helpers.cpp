@@ -40,7 +40,7 @@ std::string ParseViewTables(std::string &query) {
 
 	// Iterate over matches and extract the table names
 	for (; it != end; ++it) {
-		const std::smatch& match = *it;
+		const std::smatch &match = *it;
 		tables.push_back(match[1]);
 		if (match[2].str().length() > 0) {
 			tables.push_back(match[2]);

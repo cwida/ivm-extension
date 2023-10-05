@@ -25,7 +25,7 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 		return ParserExtensionParseResult();
 	}
 
-	//TODO: Add support for proper table name using regex
+	// TODO: Add support for proper table name using regex
 	auto parser_query = StringUtil::Replace(query_lower, "create immv as", "");
 	printf("parser query: %s \n", parser_query.c_str());
 
@@ -34,8 +34,8 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	printf("Parsed statement\n");
 
 	int l = parser.statements.size();
-	for (int i=0;i<l;i++) {
-		printf("S%d: %s\n", i+1, parser.statements[i]->ToString().c_str());
+	for (int i = 0; i < l; i++) {
+		printf("S%d: %s\n", i + 1, parser.statements[i]->ToString().c_str());
 	}
 
 	vector<unique_ptr<SQLStatement>> statements = std::move(parser.statements);
@@ -46,9 +46,7 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	}
 
 	// TODO: what if there are more than one SQL statements?
-	return ParserExtensionParseResult(
-	    make_uniq_base<ParserExtensionParseData, IVMParseData>(
-	        std::move(statements[0])));
+	return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, IVMParseData>(std::move(statements[0])));
 }
 
 ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
@@ -56,35 +54,33 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	printf("Plan function working: \n");
 	auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
 
-	auto statement = dynamic_cast<SQLStatement*>(ivm_parse_data.statement.get());
+	auto statement = dynamic_cast<SQLStatement *>(ivm_parse_data.statement.get());
 	printf("fetching statement from parse data: %s \n", statement->ToString().c_str());
 
 	Planner planner(context);
 	planner.CreatePlan(statement->Copy());
 	printf("Trying to create plan by using plan cpp api: \n%s\n", planner.plan->ToString().c_str());
 
-	Optimizer optimizer((Binder&)planner.binder, context);
+	Optimizer optimizer((Binder &)planner.binder, context);
 	auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
 	printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
 
 	printf("Level 2\n");
 	auto l2 = optimized_plan->children[0].get();
-	auto l2_aggop = dynamic_cast<LogicalAggregate*>(l2);
+	auto l2_aggop = dynamic_cast<LogicalAggregate *>(l2);
 
-
-//	ParserExtensionPlanResult result;
-//	result.function = IVMFunction();
-//	result.parameters.push_back(Value::BIGINT(2));
-//	// TODO: what is this? how to obtain this?
-//	result.modified_databases = {};
-//	result.requires_valid_transaction = false;
-//	result.return_type = StatementReturnType::QUERY_RESULT;
-//	return result;
+	//	ParserExtensionPlanResult result;
+	//	result.function = IVMFunction();
+	//	result.parameters.push_back(Value::BIGINT(2));
+	//	// TODO: what is this? how to obtain this?
+	//	result.modified_databases = {};
+	//	result.requires_valid_transaction = false;
+	//	result.return_type = StatementReturnType::QUERY_RESULT;
+	//	return result;
 	return ParserExtensionPlanResult();
 }
 
-BoundStatement IVMBind(ClientContext &context, Binder &binder,
-                         OperatorExtensionInfo *info, SQLStatement &statement) {
+BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
 	printf("In ivm bind function\n");
 	return BoundStatement();
 }

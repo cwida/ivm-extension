@@ -26,12 +26,13 @@ struct DoIVMFunctionData : public TableFunctionData {
 
 struct IVMInfo : ParserExtensionInfo {
 	unique_ptr<Connection> db_conn;
-	explicit IVMInfo(unique_ptr<Connection> db_conn) : db_conn(std::move(db_conn)) {}
+	explicit IVMInfo(unique_ptr<Connection> db_conn) : db_conn(std::move(db_conn)) {
+	}
 };
 
 class IVMParserExtension : public ParserExtension {
 public:
-	explicit IVMParserExtension(Connection* con) {
+	explicit IVMParserExtension(Connection *con) {
 		// unique_ptr<Connection> db_conn (con);
 		parse_function = IVMParseFunction;
 		plan_function = IVMPlanFunction;
@@ -41,21 +42,17 @@ public:
 	static ParserExtensionParseResult IVMParseFunction(ParserExtensionInfo *info, const string &query);
 	static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
 	                                                 unique_ptr<ParserExtensionParseData> parse_data);
-
 };
 
-BoundStatement IVMBind(ClientContext &context, Binder &binder,
-                       OperatorExtensionInfo *info, SQLStatement &statement);
+BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
 
 struct IVMOperatorExtension : public OperatorExtension {
-	IVMOperatorExtension() : OperatorExtension() { Bind = IVMBind; }
+	IVMOperatorExtension() : OperatorExtension() {
+		Bind = IVMBind;
+	}
 
-	std::string GetName() override { return "ivm"; }
-
-	unique_ptr<LogicalExtensionOperator>
-	Deserialize(LogicalDeserializationState &state,
-	            FieldReader &reader) override {
-		throw InternalException("prql operator should not be serialized");
+	std::string GetName() override {
+		return "ivm";
 	}
 };
 
@@ -63,20 +60,21 @@ struct IVMParseData : ParserExtensionParseData {
 	unique_ptr<SQLStatement> statement;
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
-		return make_uniq_base<ParserExtensionParseData, IVMParseData>(
-		    statement->Copy());
+		return make_uniq_base<ParserExtensionParseData, IVMParseData>(statement->Copy());
 	}
 
-	explicit IVMParseData(unique_ptr<SQLStatement> statement)
-	    : statement(std::move(statement)) {}
+	explicit IVMParseData(unique_ptr<SQLStatement> statement) : statement(std::move(statement)) {
+	}
 };
 
 class IVMState : public ClientContextState {
 public:
-	explicit IVMState(unique_ptr<ParserExtensionParseData> parse_data)
-	    : parse_data(std::move(parse_data)) {}
+	explicit IVMState(unique_ptr<ParserExtensionParseData> parse_data) : parse_data(std::move(parse_data)) {
+	}
 
-	void QueryEnd() override { parse_data.reset(); }
+	void QueryEnd() override {
+		parse_data.reset();
+	}
 
 	unique_ptr<ParserExtensionParseData> parse_data;
 };
@@ -106,15 +104,14 @@ public:
 	};
 
 	static duckdb::unique_ptr<FunctionData> IVMBind(ClientContext &context, TableFunctionBindInput &input,
-	                                                  vector<LogicalType> &return_types, vector<string> &names) {
+	                                                vector<LogicalType> &return_types, vector<string> &names) {
 		printf("Inside IVMBind of Table function class\n");
 		names.emplace_back("quack-a-dooo");
 		return_types.emplace_back(LogicalType::VARCHAR);
 		return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
 	}
 
-	static duckdb::unique_ptr<GlobalTableFunctionState> IVMInit(ClientContext &context,
-	                                                              TableFunctionInitInput &input) {
+	static duckdb::unique_ptr<GlobalTableFunctionState> IVMInit(ClientContext &context, TableFunctionInitInput &input) {
 		return make_uniq<IVMGlobalData>();
 	}
 

@@ -1,6 +1,6 @@
-# name: test/ivm/ivm_issue2.test
+# name: extension/ivm/tests/ivm_issue2.test
 # description: To test https://github.com/cwida/ivm-extension/issues/2
-# group: [ivm]
+# group: [tests]
 
 require ivm
 

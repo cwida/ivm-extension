@@ -1,6 +1,6 @@
-# name: test/ivm/ivm_filter.test
-# description:
-# group: [ivm]
+# name: extension/ivm/tests/ivm_filter.test
+# description: 
+# group: [tests]
 
 require ivm
 
