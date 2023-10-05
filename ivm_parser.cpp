@@ -42,12 +42,10 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	p.ParseQuery(query_lower);
 
 	return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, IVMParseData>(move(p.statements[0])));
-
 }
 
 ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
                                                               unique_ptr<ParserExtensionParseData> parse_data) {
-
 
 	// if we have a view definition statement, we create the delta tables
 	auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
@@ -125,10 +123,8 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 
 		// now we create the delta table for the result
 		con.BeginTransaction();
-		string delta_table = "create table delta_" + view_name + " as select * FROM " +
-		                     view_name + " limit 0";
-		string multiplicity_col =
-		    "alter table delta_" + view_name + " add column _duckdb_ivm_multiplicity bool";
+		string delta_table = "create table delta_" + view_name + " as select * FROM " + view_name + " limit 0";
+		string multiplicity_col = "alter table delta_" + view_name + " add column _duckdb_ivm_multiplicity bool";
 		con.Query(delta_table);
 		con.Query(multiplicity_col);
 

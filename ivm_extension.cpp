@@ -57,11 +57,11 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	// obtain view definition from catalog
 	auto &catalog = Catalog::GetSystemCatalog(context);
 	QueryErrorContext error_context = QueryErrorContext();
-	//auto view = context.TableInfo(view_name, view_schema_name);
+	// auto view = context.TableInfo(view_name, view_schema_name);
 
 	// breaks here
 	auto table_catalog_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name,
-	                                           view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
+	                                            view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
 	auto table_entry = dynamic_cast<TableCatalogEntry *>(table_catalog_entry.get());
 
 	// generate column bindings for the view definition
@@ -118,10 +118,10 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 
 	string query_create_view_delta_table = "CREATE TABLE delta_"+view_name+" AS (SELECT * FROM "+view_name+" LIMIT 0);";
 	string query_add_multiplicity_col = "ALTER TABLE delta_"+view_name+" ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
-	string ivm_query = "INSERT INTO delta_"+view_name+" SELECT * from DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');";
-	string select_query = "SELECT * FROM delta_"+view_name+";";
-	string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query + select_query;
-	return query; */
+	string ivm_query = "INSERT INTO delta_"+view_name+" SELECT * from
+	DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');"; string select_query = "SELECT * FROM
+	delta_"+view_name+";"; string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query +
+	select_query; return query; */
 }
 
 static void LoadInternal(DatabaseInstance &instance) {

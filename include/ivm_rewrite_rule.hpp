@@ -18,7 +18,7 @@
 #include "duckdb/planner/planner.hpp"
 #include "duckdb/planner/tableref/bound_basetableref.hpp"
 #include "ivm_parser.hpp"
-
+#include "ivm_logical_plan_to_string.hpp"
 #include <iostream>
 #include <utility>
 
