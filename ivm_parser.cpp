@@ -101,11 +101,12 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 
 		con.BeginTransaction();
 		// we have the table names; let's create the delta tables
-		for (auto &table_name : table_names) {
+		for (const auto& table_name : table_names) {
 			// todo schema?
 			// todo also add the view name here (there can be multiple views?)
 			// todo exception handling
 			auto delta_table = "create table delta_" + table_name + " as select * from " + table_name + " limit 0";
+			std::cout << delta_table << std::endl;
 			con.Query(delta_table);
 			if (contains_aggregation) {
 				con.Query("alter table delta_" + table_name + " add column _duckdb_ivm_multiplicity bool");
@@ -122,13 +123,15 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 		con.Commit();
 
 		// now we create the delta table for the result
+		/*
 		con.BeginTransaction();
-		string delta_table = "create table delta_" + view_name + " as select * FROM " + view_name + " limit 0";
+		//string delta_table = "create table delta_" + view_name + " as select * FROM " + view_name + " limit 0";
+		string delta_table = "create table delta_" + view_name + " as select * from DoIVM('" + view_name + "');";
 		string multiplicity_col = "alter table delta_" + view_name + " add column _duckdb_ivm_multiplicity bool";
 		con.Query(delta_table);
 		con.Query(multiplicity_col);
 
-		con.Commit();
+		con.Commit(); */
 
 	} else if (statement->type == StatementType::SELECT_STATEMENT) {
 		// genuinely don't know what to do here

@@ -150,6 +150,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	catalog.CreateTableFunction(*con.context, &ivm_func_info);
 	con.Commit();
 
+	// this is called at the database startup and every time a query fails
 	auto upsert_delta_func = PragmaFunction::PragmaCall(
 	    "ivm_upsert", UpsertDeltaQueries, {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR});
 	ExtensionUtil::RegisterFunction(instance, upsert_delta_func);
