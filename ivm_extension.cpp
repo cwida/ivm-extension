@@ -43,6 +43,7 @@ static unique_ptr<TableRef> DoIVM(ClientContext &context, TableFunctionBindInput
 
 static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableFunctionBindInput &input,
                                                   vector<LogicalType> &return_types, vector<string> &names) {
+	// this is called every time we do ivm_upsert
 	string view_catalog_name = StringValue::Get(input.inputs[0]);
 	string view_schema_name = StringValue::Get(input.inputs[1]);
 	string view_name = StringValue::Get(input.inputs[2]);
@@ -92,6 +93,7 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 }
 
 string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &parameters) {
+	// this is called every time ivm_upsert is called
 	string view_catalog_name = StringValue::Get(parameters.values[0]);
 	string view_schema_name = StringValue::Get(parameters.values[1]);
 	string view_name = StringValue::Get(parameters.values[2]);

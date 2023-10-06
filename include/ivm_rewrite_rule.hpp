@@ -312,6 +312,8 @@ public:
 			return;
 		}
 
+		// the CREATE TABLE my_table AS (query) have children in the plan (a logical empty result)
+
 		// check if plan contains table function `DoIVM`
 		// The query to trigger IVM will be of the form `CREATE TABLE delta_view_name AS SELECT * from
 		// DoIVM('view_name');` The plan's last child should be the DoIVM table function
