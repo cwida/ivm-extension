@@ -23,8 +23,19 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 		auto node = dynamic_cast<LogicalGet *>(plan.get());
 		auto table_name = node->GetTable().get()->name;
 		auto table_index = node->GetTableIndex();
-		string table_string = "from " + table_name + "\n";
-		plan_string = table_string + plan_string;
+		auto scan_column_names = node->names;
+		auto scan_column_indexes = node->column_ids; // maybe this should be projection_ids;
+		// we don't need the table function here; we assume it is a simple scan
+		string from_string = "from " + table_name + "\n";
+		// now let's see if the scan has any filters
+		std::vector<string> filters;
+		for (auto &filter : node->table_filters.filters) {
+			// extract the column id of this filter
+			auto id = filter.first;
+			auto column_name = scan_column_names[id];
+			filters.emplace_back(filter.second->ToString(column_name));
+		}
+
 		// column bindings: 0.0, 0.1, 0.2
 		// we are (probably) at the bottom
 		if (plan->children.empty()) {
@@ -41,7 +52,20 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 			// erase the last comma and space
 			select_string.erase(select_string.size() - 2, 2);
 			select_string += "\n";
-			plan_string = select_string + plan_string;
+			// now construct the WHERE clause
+			string where_string;
+			if (!filters.empty()) {
+				where_string = "where ";
+				for (auto &filter : filters) {
+					// todo handle the "a > 1 and a is not null" case (do we need both?)
+					where_string += filter + " and ";
+				}
+				// trim the last " and "
+				where_string.erase(where_string.size() - 5, 5);
+				where_string += "\n";
+			}
+			// plan string is the group by
+			plan_string = select_string + from_string + where_string + plan_string;
 			plan_string += ";";
 			return;
 		} else {
@@ -49,7 +73,6 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 		}
 	}
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
-		// for tomorrow: there is a bug here (some vector has index 0, debug from existing breakpoints)
 		auto node = dynamic_cast<LogicalAggregate *>(plan.get());
 		// we only support SUM and COUNT, so we only search for these
 		auto bindings = node->GetColumnBindings(); // 2.0, 3.0, 3.1
@@ -149,7 +172,12 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 				column_aliases.emplace_back(column_name, "ivm_placeholder_internal");
 			}
 		}
-		// todo add select statement to the query
+		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases);
+	}
+	case LogicalOperatorType::LOGICAL_FILTER: {
+		// basically the same logic as the logical get
+		auto node = dynamic_cast<LogicalFilter *>(plan.get());
+		plan_string = "where " + node->ParamsToString() + "\n" + plan_string;
 		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases);
 	}
 	}

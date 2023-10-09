@@ -263,7 +263,7 @@ public:
 			multiplicity_col_idx = modified_node_logical_agg->groups.size() - 1;
 			multiplicity_table_idx = modified_node_logical_agg->group_index;
 #ifdef DEBUG
-			for (int i = 0; i < modified_node_logical_agg->GetColumnBindings().size(); i++) {
+			for (size_t i = 0; i < modified_node_logical_agg->GetColumnBindings().size(); i++) {
 				printf("aggregate node CB after %d %s\n", i,
 				       modified_node_logical_agg->GetColumnBindings()[i].ToString().c_str());
 			}
@@ -274,7 +274,7 @@ public:
 		case LogicalOperatorType::LOGICAL_PROJECTION: {
 			printf("\nIn logical projection case \n Add the multiplicity column to the second node...\n");
 			printf("Plan: %s %s\n", plan->ToString().c_str(), plan->ParamsToString().c_str());
-			for (int i = 0; i < plan->GetColumnBindings().size(); i++) {
+			for (size_t i = 0; i < plan->GetColumnBindings().size(); i++) {
 				printf("Top node CB before %d %s\n", i, plan->GetColumnBindings()[i].ToString().c_str());
 			}
 
@@ -291,7 +291,7 @@ public:
 
 			printf("Modified plan: %s %s\n", projection_node->ToString().c_str(),
 			       projection_node->ParamsToString().c_str());
-			for (int i = 0; i < projection_node->GetColumnBindings().size(); i++) {
+			for (size_t i = 0; i < projection_node->GetColumnBindings().size(); i++) {
 				printf("Top node CB %d %s\n", i, projection_node->GetColumnBindings()[i].ToString().c_str());
 			}
 			break;
@@ -337,7 +337,8 @@ public:
 
 		// obtain view definition from catalog
 		QueryErrorContext error_context = QueryErrorContext();
-		auto view_catalog_entry = Catalog::GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog, view_schema, view,
+		auto internal_view_name = "_duckdb_internal_" + view + "_ivm";
+		auto view_catalog_entry = Catalog::GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog, view_schema, internal_view_name,
 		                                            OnEntryNotFound::THROW_EXCEPTION, error_context);
 		auto view_entry = dynamic_cast<ViewCatalogEntry *>(view_catalog_entry.get());
 #ifdef DEBUG
@@ -368,6 +369,10 @@ public:
 		printf("Optimized plan: \n%s\n", optimized_plan->ToString().c_str());
 #endif
 
+		string test_1;
+		LogicalPlanToString(optimized_plan, test_1);
+		std::cout << "\nOptimized plan to query string: " << test_1 << "\n";
+
 		// variable to store the column_idx for multiplicity column at each node
 		// we do this while creation / modification of the node
 		// because this information will not be available while modifying the parent node
@@ -385,8 +390,11 @@ public:
 		           table_catalog_entry);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
 		AddInsertNode(context, optimized_plan, table_index, view, view_catalog, view_schema);
-		std::cout << "FINAL PLAN:\n" << optimized_plan->ToString() << std::endl;
+		std::cout << "\nFINAL PLAN:\n" << optimized_plan->ToString() << std::endl;
 		plan = std::move(optimized_plan);
+		string test;
+		LogicalPlanToString(plan, test);
+		std::cout << "\nnew optimized plan to string: " << test << "\n";
 		return;
 	}
 };

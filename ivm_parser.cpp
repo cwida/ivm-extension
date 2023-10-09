@@ -41,15 +41,10 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	Parser p;
 	p.ParseQuery(query_lower);
 
-	return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, IVMParseData>(move(p.statements[0])));
-}
-
-ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
-                                                              unique_ptr<ParserExtensionParseData> parse_data) {
-
 	// if we have a view definition statement, we create the delta tables
-	auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
-	auto statement = dynamic_cast<SQLStatement *>(ivm_parse_data.statement.get());
+	//auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
+	//auto statement = dynamic_cast<SQLStatement *>(ivm_parse_data.statement.get());
+	auto statement = p.statements[0].get();
 
 	if (statement->type == StatementType::CREATE_STATEMENT) {
 
@@ -68,7 +63,7 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 		con.BeginTransaction();
 		auto table_names = con.GetTableNames(statement->query);
 
-		Planner planner(context);
+		Planner planner(*con.context);
 
 		planner.CreatePlan(statement->Copy());
 		auto plan = move(planner.plan);
@@ -122,50 +117,29 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 		auto res = con.Query(table);
 		con.Commit();
 
-		// now we create the delta table for the result
-		/*
+		// now we also create a view (for internal use, just to store the SQL query)
 		con.BeginTransaction();
-		//string delta_table = "create table delta_" + view_name + " as select * FROM " + view_name + " limit 0";
-		string delta_table = "create table delta_" + view_name + " as select * from DoIVM('" + view_name + "');";
+		auto view = "create view _duckdb_internal_" + view_name + "_ivm as " + view_query;
+		con.Query(view);
+		con.Commit();
+
+		// now we create the delta table for the result
+		con.BeginTransaction();
+		string delta_table = "create table delta_" + view_name + " as select * FROM " + view_name + " limit 0";
+		//string delta_table = "create table delta_" + view_name + " as select * from DoIVM('" + view_name + "');";
 		string multiplicity_col = "alter table delta_" + view_name + " add column _duckdb_ivm_multiplicity bool";
 		con.Query(delta_table);
 		con.Query(multiplicity_col);
 
-		con.Commit(); */
+		con.Commit();
 
-	} else if (statement->type == StatementType::SELECT_STATEMENT) {
-		// genuinely don't know what to do here
 	}
 
-	/*
-	printf("Plan function working: \n");
-	auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
-
-	auto statement = dynamic_cast<SQLStatement *>(ivm_parse_data.statement.get());
-	printf("fetching statement from parse data: %s \n", statement->ToString().c_str());
-
-	Planner planner(context);
-	planner.CreatePlan(statement->Copy());
-	printf("Trying to create plan by using plan cpp api: \n%s\n", planner.plan->ToString().c_str());
-
-	Optimizer optimizer((Binder &)planner.binder, context);
-	auto optimized_plan = optimizer.Optimize(std::move(planner.plan));
-	printf("Optimized plan: %s\n", optimized_plan->ToString().c_str());
-
-	printf("Level 2\n");
-	auto l2 = optimized_plan->children[0].get();
-	auto l2_aggop = dynamic_cast<LogicalAggregate *>(l2); */
-
-	//	ParserExtensionPlanResult result;
-	//	result.function = IVMFunction();
-	//	result.parameters.push_back(Value::BIGINT(2));
-	//	// TODO: what is this? how to obtain this?
-	//	result.modified_databases = {};
-	//	result.requires_valid_transaction = false;
-	//	result.return_type = StatementReturnType::QUERY_RESULT;
-	//	return result;
-	return ParserExtensionPlanResult();
+	//return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, IVMParseData>(move(p.statements[0])));
+	// fixme
+	return ParserExtensionParseResult("yay");
 }
+
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
 	printf("In IVM bind function\n");

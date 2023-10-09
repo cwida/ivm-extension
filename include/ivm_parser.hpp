@@ -34,13 +34,13 @@ public:
 	explicit IVMParserExtension(Connection *con) {
 		// unique_ptr<Connection> db_conn (con);
 		parse_function = IVMParseFunction;
-		plan_function = IVMPlanFunction;
+		// plan_function = IVMPlanFunction;
 		// parser_info = std::make_shared<IVMInfo>(std::move(db_conn));
 	}
 
 	static ParserExtensionParseResult IVMParseFunction(ParserExtensionInfo *info, const string &query);
-	static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
-	                                                 unique_ptr<ParserExtensionParseData> parse_data);
+	// static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
+	                                               //  unique_ptr<ParserExtensionParseData> parse_data);
 };
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
@@ -56,6 +56,9 @@ struct IVMOperatorExtension : public OperatorExtension {
 };
 
 struct IVMParseData : ParserExtensionParseData {
+	IVMParseData() {
+	}
+
 	unique_ptr<SQLStatement> statement;
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
@@ -89,10 +92,8 @@ public:
 	}
 
 	struct IVMBindData : public TableFunctionData {
-		IVMBindData(idx_t number_of_quacks) : number_of_quacks(number_of_quacks) {
+		IVMBindData() {
 		}
-
-		idx_t number_of_quacks;
 	};
 
 	struct IVMGlobalData : public GlobalTableFunctionState {
@@ -105,9 +106,10 @@ public:
 	static duckdb::unique_ptr<FunctionData> IVMBind(ClientContext &context, TableFunctionBindInput &input,
 	                                                vector<LogicalType> &return_types, vector<string> &names) {
 		printf("Inside IVMBind of Table function class\n");
-		names.emplace_back("quack-a-dooo");
-		return_types.emplace_back(LogicalType::VARCHAR);
-		return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
+		//names.emplace_back("quack-a-dooo");
+		//return_types.emplace_back(LogicalType::VARCHAR);
+		//return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
+		return make_uniq<IVMBindData>();
 	}
 
 	static duckdb::unique_ptr<GlobalTableFunctionState> IVMInit(ClientContext &context, TableFunctionInitInput &input) {

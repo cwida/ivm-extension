@@ -57,23 +57,21 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	// obtain view definition from catalog
 	auto &catalog = Catalog::GetSystemCatalog(context);
 	QueryErrorContext error_context = QueryErrorContext();
-	// auto view = context.TableInfo(view_name, view_schema_name);
-
-	// breaks here
-	auto table_catalog_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name,
-	                                            view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
-	auto table_entry = dynamic_cast<TableCatalogEntry *>(table_catalog_entry.get());
+	auto internal_view_name = "_duckdb_internal_" + view_name + "_ivm";
+	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog_name, view_schema_name,
+	                                           internal_view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
+	auto view_entry = dynamic_cast<ViewCatalogEntry *>(view_catalog_entry.get());
 
 	// generate column bindings for the view definition
 	Parser parser;
-	// parser.ParseQuery(table_entry->query->ToString());io
+	parser.ParseQuery(view_entry->query->ToString());
 	auto statement = parser.statements[0].get();
 	Planner planner(context);
 	planner.CreatePlan(statement->Copy());
 
 	// create result set using column bindings returned by the planner
 	auto result = make_uniq<DoIVMFunctionData>();
-	for (int i = 0; i < planner.names.size(); i++) {
+	for (size_t i = 0; i < planner.names.size(); i++) {
 		return_types.emplace_back(planner.types[i]);
 		names.emplace_back(planner.names[i]);
 	}

@@ -12,21 +12,18 @@ This extension assumes that changes to base table `hello` are present in delta t
 First create the base table and the view:
 ```SQL
 CREATE TABLE hello(a INTEGER, b INTEGER , c VARCHAR);
-CREATE MATERIALIZED VIEW result AS (SELECT count(a) as my_count, sum(a) as my_sum, b FROM hello GROUP BY b);
+CREATE MATERIALIZED VIEW result AS (SELECT count(a) as my_count, sum(a) as my_sum, b FROM hello WHERE a > 1 GROUP BY b);
 ```
 
-Create `delta_hello`:
+Insertion example in `delta_hello`:
 ```SQL
-CREATE TABLE delta_hello AS (SELECT * FROM hello LIMIT 0);
-ALTER TABLE delta_hello ADD COLUMN _duckdb_ivm_multiplicity BOOL;
 INSERT INTO delta_hello VALUES (1, 1, 'Mark', true), (2, 2, 'Hannes', false), (3, 1, 'Kriti', true), (4, 1, 'Peter', false);
 ```
-**NOTE**: The extension assumes the presence of the delta base table `delta_hello`.
 
 ### Incrementally maintaining view *result*
 Run the extension as
 ```SQL
-PRAGMA ivm_upsert('memory', 'main','result');
+PRAGMA ivm_upsert('memory', 'main', 'result');
 ```
 The output of the above will be the table `delta_result`, which will contain incremental processing of the changes to the base table of view `result`. 
 
