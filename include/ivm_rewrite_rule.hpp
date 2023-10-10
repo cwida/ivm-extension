@@ -338,8 +338,9 @@ public:
 		// obtain view definition from catalog
 		QueryErrorContext error_context = QueryErrorContext();
 		auto internal_view_name = "_duckdb_internal_" + view + "_ivm";
-		auto view_catalog_entry = Catalog::GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog, view_schema, internal_view_name,
-		                                            OnEntryNotFound::THROW_EXCEPTION, error_context);
+		auto view_catalog_entry =
+		    Catalog::GetEntry(context, CatalogType::VIEW_ENTRY, view_catalog, view_schema, internal_view_name,
+		                      OnEntryNotFound::THROW_EXCEPTION, error_context);
 		auto view_entry = dynamic_cast<ViewCatalogEntry *>(view_catalog_entry.get());
 #ifdef DEBUG
 		printf("View base query: %s \n", view_entry->query->ToString().c_str());
@@ -352,6 +353,7 @@ public:
 		// generate the optimized logical plan
 		Connection con(*context.db);
 		con.BeginTransaction();
+		// todo maybe we want to disable more optimizers (internal_optimizer_types)
 		con.Query("SET disabled_optimizers='compressed_materialization, statistics_propagation, expression_rewriter';");
 		con.Commit();
 
@@ -369,9 +371,10 @@ public:
 		printf("Optimized plan: \n%s\n", optimized_plan->ToString().c_str());
 #endif
 
+		/*
 		string test_1;
 		LogicalPlanToString(optimized_plan, test_1);
-		std::cout << "\nOptimized plan to query string: " << test_1 << "\n";
+		std::cout << "\nOptimized plan to query string: \n" << test_1 << "\n"; */
 
 		// variable to store the column_idx for multiplicity column at each node
 		// we do this while creation / modification of the node
@@ -390,11 +393,15 @@ public:
 		           table_catalog_entry);
 		ModifyTopNode(context, optimized_plan, multiplicity_col_idx, multiplicity_table_idx);
 		AddInsertNode(context, optimized_plan, table_index, view, view_catalog, view_schema);
+#ifdef DEBUG
 		std::cout << "\nFINAL PLAN:\n" << optimized_plan->ToString() << std::endl;
+#endif
 		plan = std::move(optimized_plan);
 		string test;
 		LogicalPlanToString(plan, test);
-		std::cout << "\nnew optimized plan to string: " << test << "\n";
+#ifdef DEBUG
+		std::cout << "\nnew optimized plan to string: \n" << test << "\n";
+#endif
 		return;
 	}
 };

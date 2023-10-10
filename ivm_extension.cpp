@@ -2,8 +2,10 @@
 
 #include "ivm_extension.hpp"
 
+#include "duckdb/catalog/catalog_entry/index_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
+#include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/function/pragma_function.hpp"
 #include "duckdb/main/appender.hpp"
 #include "duckdb/main/connection.hpp"
@@ -46,7 +48,9 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	string view_catalog_name = StringValue::Get(input.inputs[0]);
 	string view_schema_name = StringValue::Get(input.inputs[1]);
 	string view_name = StringValue::Get(input.inputs[2]);
+#ifdef DEBUG
 	printf("View to be incrementally maintained: %s \n", view_name.c_str());
+#endif
 
 	input.named_parameters["view_name"] = view_name;
 	input.named_parameters["view_catalog_name"] = view_catalog_name;
@@ -95,31 +99,122 @@ static void DoIVMFunction(ClientContext &context, TableFunctionInput &data_p, Da
 string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &parameters) {
 	// queries to run in order to materialize IVM upserts
 	// these are executed whenever the pragma ivm_upsert is called
+	auto &catalog = Catalog::GetSystemCatalog(context);
+	QueryErrorContext error_context = QueryErrorContext();
+
 	string view_catalog_name = StringValue::Get(parameters.values[0]);
 	string view_schema_name = StringValue::Get(parameters.values[1]);
 	string view_name = StringValue::Get(parameters.values[2]);
+
+	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name,
+	                                           view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
+	auto delta_view_catalog_entry =
+	    catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name, "delta_" + view_name,
+	                     OnEntryNotFound::THROW_EXCEPTION, error_context);
+	// todo this will break if there is no aggregation
+	auto index_delta_view_catalog_entry =
+	    catalog.GetEntry(context, CatalogType::INDEX_ENTRY, view_catalog_name, view_schema_name,
+	                     "delta_" + view_name + "_ivm_index", OnEntryNotFound::THROW_EXCEPTION, error_context);
+
+	// we cannot use column references in ART indexes since their implementation is really messy
+	// we need to use column indexes; maybe there is a more efficient way (unique constraints?)
+	// but I cannot be bothered to think about this now
+
+	// note: joins are hash joins by default, with group hash (try forcing index joins?)
+
+	// let's construct the query step by step
+	// first of all we need to understand the keys
+	auto delta_view_entry = dynamic_cast<TableCatalogEntry *>(delta_view_catalog_entry.get());
+	// compiler is too stupid to figure out "auto" here
+	const ColumnList &delta_view_columns = delta_view_entry->GetColumns();
+
+	auto column_names = delta_view_columns.GetColumnNames();
+	auto index_catalog_entry = dynamic_cast<IndexCatalogEntry *>(index_delta_view_catalog_entry.get());
+	auto key_ids = dynamic_cast<ART *>(index_catalog_entry->index.get())->column_ids;
+
+	vector<string> keys;
+	vector<string> aggregates;
+	for (auto i = 0; i < key_ids.size(); i++) {
+		keys.emplace_back(column_names[key_ids[i]]);
+	}
+	// todo - what the hell to do with the multiplicity column?
+	// implementing the easiest way, will probably have to come back to this later
+	// let's just pretend it does not exist and only support insertions
+
+	// let's find all the columns that are not keys
+	// create an unordered_set from the column names for efficient lookups
+	unordered_set<std::string> keys_set(keys.begin(), keys.end());
+
+	for (auto &column : column_names) {
+		if (keys_set.find(column) == keys_set.end() && column != "_duckdb_ivm_multiplicity") {
+			// we discard the multiplicity column
+			aggregates.push_back(column);
+		}
+	}
+
+	// this should be the end of the painful part (famous last words)
+
+	// select is easy; both tables have the same columns
+	// we assume that the delta view has the same columns as the view + the multiplicity column
+	string select_string = "select ";
+	// we only add the keys once
+	for (auto &key : keys) {
+		select_string = select_string + view_name + "." + key + ", ";
+	}
+	// now we sum the columns (todo - is it always sum here?)
+	for (auto &column : aggregates) {
+		select_string =
+		    select_string + "sum(" + view_name + "." + column + " + delta_" + view_name + "." + column + "), ";
+	}
+	// remove the last comma
+	select_string.erase(select_string.size() - 2, 2);
+	select_string += "\n";
+
+	// from is also easy, there's two tables
+	string from_string = "from " + view_name + ", delta_" + view_name + "\n";
+	// where clause (join), we need to join on keys
+	string where_string = "where ";
+	for (auto &key : keys) {
+		where_string = where_string + view_name + "." + key + " = delta_" + view_name + "." + key + " and ";
+	}
+	// remove the last "and"
+	where_string.erase(where_string.size() - 5, 5);
+	where_string += "\n";
+
+	// group by is also easy, we just group by the keys
+	string group_by_string = "group by ";
+	for (auto &key : keys) {
+		group_by_string = group_by_string + view_name + "." + key + ", ";
+	}
+	// remove the last comma
+	group_by_string.erase(group_by_string.size() - 2, 2);
+	group_by_string += "\n";
+
+	string query_string = select_string + from_string + where_string + group_by_string + ";";
+	string upsert_query = "insert or replace into " + view_name + " " + query_string + "\n";
+
+	/*
+	select product_sales.product_name,
+	    sum(product_sales.total_amount + delta_product_sales.total_amount),
+	    sum(product_sales.total_orders + delta_product_sales.total_orders),
+	    _duckdb_ivm_multiplicity
+	from delta_product_sales, product_sales
+	where delta_product_sales.product_name = product_sales.product_name
+	group by product_sales.product_name, _duckdb_ivm_multiplicity;
+	 */
 
 	string ivm_query = "INSERT INTO delta_" + view_name + " SELECT * from DoIVM('" + view_catalog_name + "','" +
 	                   view_schema_name + "','" + view_name + "');";
 	string select_query = "SELECT * FROM delta_" + view_name + ";";
-	string query = ivm_query + select_query;
+	// now we delete everything from the delta view
+	string delete_view_query = "DELETE FROM delta_" + view_name + ";";
+	string test = "SELECT * FROM " + view_name + ";";
+
+	// todo - delete also from delta table and insert into original table
+
+	// string query = ivm_query + select_query + upsert_query + delete_view_query + test;
+	string query = ivm_query + upsert_query + delete_view_query + test;
 	return query;
-
-	// create table delta_test as (select * from test limit 0);
-	// alter table delta_test add column _duckdb_ivm_multiplicity bool;
-	// insert into delta_test select * from DoIVM('memory', 's', 'test');
-	// SELECT * FROM delta_test;
-	/*
-	string view_catalog_name = StringValue::Get(parameters.values[0]);
-	string view_schema_name = StringValue::Get(parameters.values[1]);
-	string view_name = StringValue::Get(parameters.values[2]);
-
-	string query_create_view_delta_table = "CREATE TABLE delta_"+view_name+" AS (SELECT * FROM "+view_name+" LIMIT 0);";
-	string query_add_multiplicity_col = "ALTER TABLE delta_"+view_name+" ADD COLUMN _duckdb_ivm_multiplicity BOOL;";
-	string ivm_query = "INSERT INTO delta_"+view_name+" SELECT * from
-	DoIVM('"+view_catalog_name+"','"+view_schema_name+"','"+view_name+"');"; string select_query = "SELECT * FROM
-	delta_"+view_name+";"; string query = query_create_view_delta_table + query_add_multiplicity_col + ivm_query +
-	select_query; return query; */
 }
 
 static void LoadInternal(DatabaseInstance &instance) {

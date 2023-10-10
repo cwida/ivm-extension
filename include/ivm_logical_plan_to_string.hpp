@@ -28,7 +28,7 @@ namespace duckdb {
 void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string);
 void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
                          std::unordered_map<string, string> &column_names,
-                         std::vector<std::pair<string, string>> &column_aliases);
+                         std::vector<std::pair<string, string>> &column_aliases, string &insert_table_name);
 } // namespace duckdb
 
 #endif // DUCKDB_IVM_LOGICAL_PLAN_TO_STRING_HPP

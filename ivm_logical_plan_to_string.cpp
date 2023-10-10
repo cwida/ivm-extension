@@ -10,12 +10,13 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string)
 	// example: select "a, b, c" should not become select "b, a, c"
 	// using trees or hash tables would not preserve the order
 	std::vector<std::pair<string, string>> column_aliases;
-	LogicalPlanToString(plan, plan_string, column_names, column_aliases);
+	string insert_table_name;
+	LogicalPlanToString(plan, plan_string, column_names, column_aliases, insert_table_name);
 }
 
 void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
                          std::unordered_map<string, string> &column_names,
-                         std::vector<std::pair<string, string>> &column_aliases) {
+                         std::vector<std::pair<string, string>> &column_aliases, string &insert_table_name) {
 
 	// we reached a root node
 	switch (plan->type) {
@@ -65,7 +66,11 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 				where_string += "\n";
 			}
 			// plan string is the group by
-			plan_string = select_string + from_string + where_string + plan_string;
+			string insert_string;
+			if (!insert_table_name.empty()) {
+				insert_string = "insert into " + insert_table_name + "\n";
+			}
+			plan_string = insert_string + select_string + from_string + where_string + plan_string;
 			plan_string += ";";
 			return;
 		} else {
@@ -153,32 +158,42 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 		}
 
 		plan_string += "\n";
-		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases);
+		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases, insert_table_name);
 	}
 
 	case LogicalOperatorType::LOGICAL_PROJECTION: {
 		auto node = dynamic_cast<LogicalProjection *>(plan.get());
-		auto bindings = node->GetColumnBindings(); // not really needed now
-		for (auto &expression : node->expressions) {
-			// todo handle the cases of other expression types
-			// note: expression_rewriter can be turned off if it makes it simple to implement the rest
-			if (expression->type == ExpressionType::BOUND_COLUMN_REF) {
-				auto column = dynamic_cast<BoundColumnRefExpression *>(expression.get());
-				auto column_index = column->binding.column_index;
-				auto table_index = column->binding.table_index;
-				auto column_name = column->alias;
-				column_names[std::to_string(table_index) + "." + std::to_string(column_index)] = column_name;
-				// 3.0, 3.1, 2.0
-				column_aliases.emplace_back(column_name, "ivm_placeholder_internal");
+		if (column_aliases.empty()) {
+			// this is the first projection (at least in this first rudimental implementation)
+			// when we support more complicated queries, we can just add a do_ivm flag to skip this projection
+			// (our optimizer rule adds a "fake" projection at the bottom)
+			auto bindings = node->GetColumnBindings(); // not really needed now
+			for (auto &expression : node->expressions) {
+				// todo handle the cases of other expression types
+				// note: expression_rewriter can be turned off if it makes it simple to implement the rest
+				if (expression->type == ExpressionType::BOUND_COLUMN_REF) {
+					auto column = dynamic_cast<BoundColumnRefExpression *>(expression.get());
+					auto column_index = column->binding.column_index;
+					auto table_index = column->binding.table_index;
+					auto column_name = column->alias;
+					column_names[std::to_string(table_index) + "." + std::to_string(column_index)] = column_name;
+					// 3.0, 3.1, 2.0
+					column_aliases.emplace_back(column_name, "ivm_placeholder_internal");
+				}
 			}
 		}
-		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases);
+		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases, insert_table_name);
 	}
 	case LogicalOperatorType::LOGICAL_FILTER: {
 		// basically the same logic as the logical get
 		auto node = dynamic_cast<LogicalFilter *>(plan.get());
 		plan_string = "where " + node->ParamsToString() + "\n" + plan_string;
-		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases);
+		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases, insert_table_name);
+	}
+	case LogicalOperatorType::LOGICAL_INSERT: {
+		// this should be transformed into an upsert
+		auto node = dynamic_cast<LogicalInsert *>(plan.get());
+		return LogicalPlanToString(plan->children[0], plan_string, column_names, column_aliases, node->table.name);
 	}
 	}
 }

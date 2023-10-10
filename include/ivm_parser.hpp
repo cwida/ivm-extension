@@ -40,7 +40,7 @@ public:
 
 	static ParserExtensionParseResult IVMParseFunction(ParserExtensionInfo *info, const string &query);
 	// static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
-	                                               //  unique_ptr<ParserExtensionParseData> parse_data);
+	//  unique_ptr<ParserExtensionParseData> parse_data);
 };
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
@@ -106,9 +106,9 @@ public:
 	static duckdb::unique_ptr<FunctionData> IVMBind(ClientContext &context, TableFunctionBindInput &input,
 	                                                vector<LogicalType> &return_types, vector<string> &names) {
 		printf("Inside IVMBind of Table function class\n");
-		//names.emplace_back("quack-a-dooo");
-		//return_types.emplace_back(LogicalType::VARCHAR);
-		//return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
+		// names.emplace_back("quack-a-dooo");
+		// return_types.emplace_back(LogicalType::VARCHAR);
+		// return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
 		return make_uniq<IVMBindData>();
 	}
 

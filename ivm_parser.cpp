@@ -42,8 +42,8 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 	p.ParseQuery(query_lower);
 
 	// if we have a view definition statement, we create the delta tables
-	//auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
-	//auto statement = dynamic_cast<SQLStatement *>(ivm_parse_data.statement.get());
+	// auto &ivm_parse_data = dynamic_cast<IVMParseData &>(*parse_data);
+	// auto statement = dynamic_cast<SQLStatement *>(ivm_parse_data.statement.get());
 	auto statement = p.statements[0].get();
 
 	if (statement->type == StatementType::CREATE_STATEMENT) {
@@ -57,7 +57,7 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 		// parsing the logical plan
 		// todo db path??
 
-		DuckDB db("../test_ivm.db");
+		DuckDB db("../test_sales.db");
 		Connection con(db);
 
 		con.BeginTransaction();
@@ -68,20 +68,30 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 		planner.CreatePlan(statement->Copy());
 		auto plan = move(planner.plan);
 
+#ifdef DEBUG
 		std::cout << plan->ToString() << std::endl;
+#endif
 
 		std::stack<LogicalOperator *> node_stack;
 		node_stack.push(plan.get());
 
 		bool contains_aggregation;
+		vector<string> aggregate_columns;
 
+		// todo rewrite this in a decent way
 		while (!node_stack.empty()) {
 			auto current = node_stack.top();
 			node_stack.pop();
 
 			if (current->type == LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY) {
 				contains_aggregation = true;
-				break;
+				// find the aggregation column(s) in order to create an index
+				auto node = dynamic_cast<LogicalAggregate *>(current);
+				for (auto &group : node->groups) {
+					auto column = dynamic_cast<BoundColumnRefExpression *>(group.get());
+					aggregate_columns.emplace_back(column->alias);
+				}
+				break; // we assume one aggregate node (for now)
 			}
 
 			if (!current->children.empty()) {
@@ -94,14 +104,22 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 
 		con.Rollback();
 
+		// now we create the table (the view, internally stored as a table)
 		con.BeginTransaction();
-		// we have the table names; let's create the delta tables
-		for (const auto& table_name : table_names) {
+		auto table = "create table " + view_name + " as " + view_query;
+		auto res = con.Query(table);
+		con.Commit();
+
+		con.BeginTransaction();
+		// we have the table names; let's create the delta tables (to store insertions, deletions, updates)
+		for (const auto &table_name : table_names) {
 			// todo schema?
 			// todo also add the view name here (there can be multiple views?)
 			// todo exception handling
 			auto delta_table = "create table delta_" + table_name + " as select * from " + table_name + " limit 0";
+#ifdef DEBUG
 			std::cout << delta_table << std::endl;
+#endif
 			con.Query(delta_table);
 			if (contains_aggregation) {
 				con.Query("alter table delta_" + table_name + " add column _duckdb_ivm_multiplicity bool");
@@ -111,35 +129,50 @@ ParserExtensionParseResult IVMParserExtension::IVMParseFunction(ParserExtensionI
 
 		// todo handle the case of replacing column names
 
-		// now we also create the table
-		con.BeginTransaction();
-		auto table = "create table " + view_name + " as " + view_query;
-		auto res = con.Query(table);
-		con.Commit();
-
 		// now we also create a view (for internal use, just to store the SQL query)
 		con.BeginTransaction();
 		auto view = "create view _duckdb_internal_" + view_name + "_ivm as " + view_query;
 		con.Query(view);
 		con.Commit();
 
-		// now we create the delta table for the result
+		// now we create the delta table for the result (to store the IVM algorithm output)
 		con.BeginTransaction();
 		string delta_table = "create table delta_" + view_name + " as select * FROM " + view_name + " limit 0";
-		//string delta_table = "create table delta_" + view_name + " as select * from DoIVM('" + view_name + "');";
 		string multiplicity_col = "alter table delta_" + view_name + " add column _duckdb_ivm_multiplicity bool";
 		con.Query(delta_table);
 		con.Query(multiplicity_col);
 
 		con.Commit();
 
+		// lastly, we need to create an index on the aggregation keys on the view and delta result table
+		// todo - do we need PRAGMA force_index_join?
+		// todo - apparently we can create non-unique indexes, will we need this?
+		// todo handle the case of no aggregation
+		if (contains_aggregation) {
+			string index_query_delta_table =
+			    "create unique index delta_" + view_name + "_ivm_index on delta_" + view_name + "(";
+			string index_query_view = "create unique index " + view_name + "_ivm_index on " + view_name + "(";
+			for (size_t i = 0; i < aggregate_columns.size(); i++) {
+				index_query_delta_table += aggregate_columns[i];
+				index_query_view += aggregate_columns[i];
+				if (i != aggregate_columns.size() - 1) {
+					index_query_delta_table += ", ";
+					index_query_view += ", ";
+				}
+			}
+			index_query_delta_table += ");";
+			index_query_view += ");";
+			con.BeginTransaction();
+			auto r1 = con.Query(index_query_delta_table);
+			auto r2 = con.Query(index_query_view);
+			con.Commit();
+		}
 	}
 
-	//return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, IVMParseData>(move(p.statements[0])));
+	// return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, IVMParseData>(move(p.statements[0])));
 	// fixme
-	return ParserExtensionParseResult("yay");
+	return ParserExtensionParseResult("Success!");
 }
-
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
 	printf("In IVM bind function\n");
