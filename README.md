@@ -29,6 +29,11 @@ Insertion example (with an additional boolean for insertions/deletions, assuming
 INSERT INTO delta_sales VALUES (6, 'a', 90, '2023-01-21', true), (7, 'b', 10, '2023-01-25', true), (8, 'a', 20, '2023-01-26', true), (9, 'c', 45, '2023-01-28', true);
 ```
 
+Test with deletions (for debugging purposes):
+```SQL
+INSERT INTO delta_sales VALUES (1, 'a', 100, '2023-01-10', false), (2, 'b', 50, '2023-01-12', false), (7, 'a', 20, '2023-01-26', true), (8, 'c', 45, '2023-01-28', true);
+```
+
 ### Incrementally maintaining view *result*
 Run the extension as
 ```SQL

@@ -32,6 +32,8 @@ struct DoIVMData : public GlobalTableFunctionState {
 	}
 	idx_t offset;
 	string view_name;
+	// string view_string;
+
 };
 
 unique_ptr<GlobalTableFunctionState> DoIVMInit(ClientContext &context, TableFunctionInitInput &input) {
@@ -45,6 +47,9 @@ static unique_ptr<TableRef> DoIVM(ClientContext &context, TableFunctionBindInput
 
 static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableFunctionBindInput &input,
                                                   vector<LogicalType> &return_types, vector<string> &names) {
+	// called when the pragma is executed
+	// specifies the output format of the query (columns)
+	// display the outputs (do not remove)
 	string view_catalog_name = StringValue::Get(input.inputs[0]);
 	string view_schema_name = StringValue::Get(input.inputs[1]);
 	string view_name = StringValue::Get(input.inputs[2]);
@@ -59,6 +64,7 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	// obtain the bindings for view_name
 
 	// obtain view definition from catalog
+	// we need this to understand the column structure of the view
 	auto &catalog = Catalog::GetSystemCatalog(context);
 	QueryErrorContext error_context = QueryErrorContext();
 	auto internal_view_name = "_duckdb_internal_" + view_name + "_ivm";
@@ -67,6 +73,8 @@ static duckdb::unique_ptr<FunctionData> DoIVMBind(ClientContext &context, TableF
 	auto view_entry = dynamic_cast<ViewCatalogEntry *>(view_catalog_entry.get());
 
 	// generate column bindings for the view definition
+	// we could try and avoid this but we need to know the column names
+	// this is the plan of the view which will be fed to the optimizer rules
 	Parser parser;
 	parser.ParseQuery(view_entry->query->ToString());
 	auto statement = parser.statements[0].get();
@@ -106,8 +114,6 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	string view_schema_name = StringValue::Get(parameters.values[1]);
 	string view_name = StringValue::Get(parameters.values[2]);
 
-	auto view_catalog_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name,
-	                                           view_name, OnEntryNotFound::THROW_EXCEPTION, error_context);
 	auto delta_view_catalog_entry =
 	    catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name, "delta_" + view_name,
 	                     OnEntryNotFound::THROW_EXCEPTION, error_context);
@@ -152,8 +158,78 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 		}
 	}
 
+	/*
+	 insert or replace into product_sales
+	 with ivm_cte AS (
+	 select product_name, sum(case when _duckdb_ivm_multiplicity = false then -total_amount else total_amount end) as total_amount,
+	 sum(case when _duckdb_ivm_multiplicity = false then -total_orders else total_orders end)
+	 as total_orders
+	 from delta_product_sales
+	 group by product_name )
+	 select product_sales.product_name,
+	 sum(product_sales.total_amount + delta_product_sales.total_amount),
+	 sum(product_sales.total_orders + delta_product_sales.total_orders)
+	 from product_sales, ivm_cte as delta_product_sales
+	 where product_sales.product_name = delta_product_name group by product_sales.product_name;
+
+	 */
+
 	// this should be the end of the painful part (famous last words)
 
+	/* query with insertions and deletions:
+	    WITH ivm_cte AS (
+	     SELECT product_name,
+	        SUM(CASE WHEN _duckdb_ivm_multiplicity = false THEN -total_amount ELSE total_amount END) AS total_amount,
+	        SUM(CASE WHEN _duckdb_ivm_multiplicity = false THEN -total_orders ELSE total_orders END) AS total_orders
+	        FROM delta_product_sales GROUP BY product_name)
+	    select product_sales.product_name,
+	        sum(product_sales.total_amount + delta_product_sales.total_amount),
+	        sum(product_sales.total_orders + delta_product_sales.total_orders)
+	    from ivm_cte as delta_product_sales, product_sales
+	    where delta_product_sales.product_name = product_sales.product_name
+	    group by product_sales.product_name;
+	 */
+
+	/*
+	 * query with only insertions:
+	    select product_sales.product_name,
+	        sum(product_sales.total_amount + delta_product_sales.total_amount),
+	        sum(product_sales.total_orders + delta_product_sales.total_orders)
+	    from delta_product_sales, product_sales
+	    where delta_product_sales.product_name = product_sales.product_name
+	    group by product_sales.product_name;
+	 */
+
+	// todo rewrite the join (from) as left join
+
+	// we start building the CTE (assuming it's always named ivm_cte)
+	string cte_string = "with ivm_cte AS (\n";
+	string cte_select_string = "select ";
+	for (auto &key : keys) {
+		cte_select_string = cte_select_string + key + ", ";
+	}
+	// now we sum the columns
+	for (auto &column : aggregates) {
+		cte_select_string = cte_select_string + "sum(case when _duckdb_ivm_multiplicity = false then -" + column +
+		                        " else " + column + " end) as " + column + ", ";
+	}
+	// remove the last comma
+	cte_select_string.erase(cte_select_string.size() - 2, 2);
+	cte_select_string += "\n";
+	// from
+	string cte_from_string = "from delta_" + view_name + "\n";
+	// group by
+	string cte_group_by_string = "group by ";
+	for (auto &key : keys) {
+		cte_group_by_string = cte_group_by_string + key + ", ";
+	}
+	// remove the last comma
+	cte_group_by_string.erase(cte_group_by_string.size() - 2, 2);
+	cte_group_by_string += "\n";
+
+	cte_string = cte_string + cte_select_string + cte_from_string + cte_group_by_string + ")\n";
+
+	// now build the external query
 	// select is easy; both tables have the same columns
 	// we assume that the delta view has the same columns as the view + the multiplicity column
 	string select_string = "select ";
@@ -171,7 +247,8 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	select_string += "\n";
 
 	// from is also easy, there's two tables
-	string from_string = "from " + view_name + ", delta_" + view_name + "\n";
+	// string from_string = "from " + view_name + ", delta_" + view_name + "\n";
+	string from_string = "from " + view_name + ", ivm_cte as delta_" + view_name + "\n";
 	// where clause (join), we need to join on keys
 	string where_string = "where ";
 	for (auto &key : keys) {
@@ -190,28 +267,22 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	group_by_string.erase(group_by_string.size() - 2, 2);
 	group_by_string += "\n";
 
-	string query_string = select_string + from_string + where_string + group_by_string + ";";
+	string external_query_string = select_string + from_string + where_string + group_by_string + ";\n";
+	string query_string = cte_string + external_query_string;
 	string upsert_query = "insert or replace into " + view_name + " " + query_string + "\n";
+	// std::cout << "\n" << upsert_query << "\n";
 
-	/*
-	select product_sales.product_name,
-	    sum(product_sales.total_amount + delta_product_sales.total_amount),
-	    sum(product_sales.total_orders + delta_product_sales.total_orders),
-	    _duckdb_ivm_multiplicity
-	from delta_product_sales, product_sales
-	where delta_product_sales.product_name = product_sales.product_name
-	group by product_sales.product_name, _duckdb_ivm_multiplicity;
-	 */
-
+	// DoIVM is a table function (root of the tree)
 	string ivm_query = "INSERT INTO delta_" + view_name + " SELECT * from DoIVM('" + view_catalog_name + "','" +
 	                   view_schema_name + "','" + view_name + "');";
-	string select_query = "SELECT * FROM delta_" + view_name + ";";
+	// string select_query = "SELECT * FROM delta_" + view_name + ";";
 	// now we delete everything from the delta view
 	string delete_view_query = "DELETE FROM delta_" + view_name + ";";
 	string test = "SELECT * FROM " + view_name + ";";
 
 	// todo - delete also from delta table and insert into original table
 
+	// string query = ivm_query + select_query;
 	// string query = ivm_query + select_query + upsert_query + delete_view_query + test;
 	string query = ivm_query + upsert_query + delete_view_query + test;
 	return query;
@@ -222,7 +293,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	// add a parser extension
 	auto &db_config = duckdb::DBConfig::GetConfig(instance);
 	Connection con(instance);
-	auto ivm_parser = duckdb::IVMParserExtension(&con);
+	auto ivm_parser = duckdb::IVMParserExtension();
 
 	auto ivm_rewrite_rule = duckdb::IVMRewriteRule();
 

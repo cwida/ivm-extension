@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "duckdb.hpp"
 
 #include "duckdb/main/extension_util.hpp"
@@ -31,16 +33,18 @@ struct IVMInfo : ParserExtensionInfo {
 
 class IVMParserExtension : public ParserExtension {
 public:
-	explicit IVMParserExtension(Connection *con) {
+	explicit IVMParserExtension() {
 		// unique_ptr<Connection> db_conn (con);
 		parse_function = IVMParseFunction;
-		// plan_function = IVMPlanFunction;
+		plan_function = IVMPlanFunction;
 		// parser_info = std::make_shared<IVMInfo>(std::move(db_conn));
 	}
 
 	static ParserExtensionParseResult IVMParseFunction(ParserExtensionInfo *info, const string &query);
-	// static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
-	//  unique_ptr<ParserExtensionParseData> parse_data);
+	static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
+	unique_ptr<ParserExtensionParseData> parse_data);
+
+	static void IVMWrite(const string& filename, bool append, const string& compiled_query);
 };
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
@@ -51,7 +55,7 @@ struct IVMOperatorExtension : public OperatorExtension {
 	}
 
 	std::string GetName() override {
-		return "ivm";
+		return "IVM";
 	}
 };
 
@@ -60,6 +64,7 @@ struct IVMParseData : ParserExtensionParseData {
 	}
 
 	unique_ptr<SQLStatement> statement;
+	// string query;
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
 		return make_uniq_base<ParserExtensionParseData, IVMParseData>(statement->Copy());
@@ -81,19 +86,24 @@ public:
 	unique_ptr<ParserExtensionParseData> parse_data;
 };
 
+
 class IVMFunction : public TableFunction {
 public:
 	IVMFunction() {
 		name = "IVM function";
-		arguments.push_back(LogicalType::BIGINT);
+		arguments.push_back(LogicalType::BOOLEAN); // parsing successful
 		bind = IVMBind;
 		init_global = IVMInit;
 		function = IVMFunc;
 	}
 
 	struct IVMBindData : public TableFunctionData {
-		IVMBindData() {
+
+		explicit IVMBindData(bool result) : result(result) {
 		}
+
+		// string sql_query;
+		bool result;
 	};
 
 	struct IVMGlobalData : public GlobalTableFunctionState {
@@ -106,10 +116,13 @@ public:
 	static duckdb::unique_ptr<FunctionData> IVMBind(ClientContext &context, TableFunctionBindInput &input,
 	                                                vector<LogicalType> &return_types, vector<string> &names) {
 		printf("Inside IVMBind of Table function class\n");
-		// names.emplace_back("quack-a-dooo");
-		// return_types.emplace_back(LogicalType::VARCHAR);
-		// return make_uniq<IVMBindData>(BigIntValue::Get(input.inputs[0]));
-		return make_uniq<IVMBindData>();
+		names.emplace_back("MATERIALIZED VIEW CREATION");
+		return_types.emplace_back(LogicalType::BOOLEAN);
+		bool result = false;
+		if (IntegerValue::Get(input.inputs[0]) == 1) {
+			result = true;
+		}
+		return make_uniq<IVMBindData>(result);
 	}
 
 	static duckdb::unique_ptr<GlobalTableFunctionState> IVMInit(ClientContext &context, TableFunctionInitInput &input) {
@@ -117,7 +130,18 @@ public:
 	}
 
 	static void IVMFunc(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+		// placeholder (this needs to return something)
 		printf("Inside IVMFunc of Table function class\n");
+		auto &bind_data = data_p.bind_data->Cast<IVMBindData>();
+		auto &data = dynamic_cast<IVMGlobalData &>(*data_p.global_state);
+		if (data.offset >= 1) {
+			// finished returning values
+			return;
+		}
+		auto result = Value::BOOLEAN(bind_data.result);
+		data.offset++;
+		output.SetValue(0, 0, result);
+		output.SetCardinality(1);
 	}
 };
 

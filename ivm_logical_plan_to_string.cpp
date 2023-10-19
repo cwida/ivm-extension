@@ -170,7 +170,6 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
 			auto bindings = node->GetColumnBindings(); // not really needed now
 			for (auto &expression : node->expressions) {
 				// todo handle the cases of other expression types
-				// note: expression_rewriter can be turned off if it makes it simple to implement the rest
 				if (expression->type == ExpressionType::BOUND_COLUMN_REF) {
 					auto column = dynamic_cast<BoundColumnRefExpression *>(expression.get());
 					auto column_index = column->binding.column_index;

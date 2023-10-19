@@ -309,6 +309,8 @@ public:
 
 	static void IVMRewriteRuleFunction(ClientContext &context, OptimizerExtensionInfo *info,
 	                                   duckdb::unique_ptr<LogicalOperator> &plan) {
+		// first function call
+		// the plan variable contains the plan for "SELECT * FROM DOIVM"
 		if (plan->children.empty()) {
 			return;
 		}
