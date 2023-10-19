@@ -120,7 +120,7 @@ public:
 		return_types.emplace_back(LogicalType::BOOLEAN);
 		bool result = false;
 		if (IntegerValue::Get(input.inputs[0]) == 1) {
-			result = true;
+			result = true; // explict creation of the result since the input is an integer value for some reason
 		}
 		return make_uniq<IVMBindData>(result);
 	}

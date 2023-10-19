@@ -69,17 +69,16 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 
 	// now we create the delta table based on the view definition
 	// parsing the logical plan
-	// todo db path??
 
-	string compiled_file_path = "../ivm_compiled_queries_" + view_name + ".sql";
+	string db_path = context.db->GetFileSystem().GetWorkingDirectory();
+	string compiled_file_path = db_path + "/ivm_compiled_queries_" + view_name + ".sql";
 
-	DuckDB db("../test_sales.db");
-	Connection con(db);
+	Connection con(*context.db.get());
 
 	con.BeginTransaction();
 	auto table_names = con.GetTableNames(statement->query);
 
-	Planner planner(*con.context);
+	Planner planner(context);
 
 	planner.CreatePlan(statement->Copy());
 	auto plan = move(planner.plan);
@@ -90,7 +89,6 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	bool contains_aggregation;
 	vector<string> aggregate_columns;
 
-	// todo rewrite this in a decent way
 	while (!node_stack.empty()) {
 		auto current = node_stack.top();
 		node_stack.pop();
@@ -131,9 +129,6 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 		// todo exception handling
 		auto delta_table =
 		    "create table if not exists delta_" + table_name + " as select * from " + table_name + " limit 0;\n";
-#ifdef DEBUG
-		std::cout << delta_table << std::endl;
-#endif
 		con.Query(delta_table);
 		IVMWrite(compiled_file_path, true, delta_table);
 		auto mul_col_table = "alter table delta_" + table_name + " add column _duckdb_ivm_multiplicity bool;\n";
@@ -176,7 +171,7 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 		}
 		index_query_view += ");\n";
 		con.BeginTransaction();
-		auto r2 = con.Query(index_query_view);
+		con.Query(index_query_view);
 		con.Commit();
 		// writing to file
 		IVMWrite(compiled_file_path, true, index_query_view);
@@ -191,7 +186,6 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	ParserExtensionPlanResult result;
 	result.function = IVMFunction();
 	result.parameters.push_back(true); // this could be true or false if we add exception handling
-	// todo make this boolean
 	result.modified_databases = {};
 	result.requires_valid_transaction = false;
 	result.return_type = StatementReturnType::QUERY_RESULT;
