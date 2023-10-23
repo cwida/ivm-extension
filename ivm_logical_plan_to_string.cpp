@@ -18,6 +18,8 @@ void LogicalPlanToString(unique_ptr<LogicalOperator> &plan, string &plan_string,
                          std::unordered_map<string, string> &column_names,
                          std::vector<std::pair<string, string>> &column_aliases, string &insert_table_name) {
 
+	// todo: this is buggy with SELECT * WHERE;
+
 	// we reached a root node
 	switch (plan->type) {
 	case LogicalOperatorType::LOGICAL_GET: {

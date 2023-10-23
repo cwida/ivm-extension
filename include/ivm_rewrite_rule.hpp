@@ -243,8 +243,6 @@ public:
 			printf("Aggregate index: %llu Group index: %llu\n", modified_node_logical_agg->aggregate_index,
 			       modified_node_logical_agg->group_index);
 #endif
-			// ila
-			// multiplicity_table_idx = modified_node_logical_agg->children[0]->GetTableIndex()[0];
 			auto mult_group_by =
 			    make_uniq<BoundColumnRefExpression>("_duckdb_ivm_multiplicity", LogicalType::BOOLEAN,
 			                                        ColumnBinding(multiplicity_table_idx, multiplicity_col_idx));

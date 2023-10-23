@@ -21,6 +21,7 @@ INSERT INTO sales VALUES (1, 'a', 100, '2023-01-10'), (2, 'b', 50, '2023-01-12')
 Now create a materialized view:
 ```SQL
 CREATE MATERIALIZED VIEW product_sales AS SELECT product_name, SUM(amount) AS total_amount, COUNT(*) AS total_orders FROM sales WHERE product_name = 'a' OR product_name = 'b' GROUP BY product_name;
+CREATE MATERIALIZED VIEW product_sales AS SELECT * FROM sales WHERE product_name = 'a';
 SELECT * FROM product_sales; -- to check the view content
 ```
 Now we assume that changes are to be stored in a delta table, in our case `delta_sales`.
@@ -28,8 +29,7 @@ Insertion example (with an additional boolean for insertions/deletions, assuming
 ```SQL
 INSERT INTO delta_sales VALUES (6, 'a', 90, '2023-01-21', true), (7, 'b', 10, '2023-01-25', true), (8, 'a', 20, '2023-01-26', true), (9, 'c', 45, '2023-01-28', true);
 ```
-
-Test with deletions (for debugging purposes):
+Test with deletions:
 ```SQL
 INSERT INTO delta_sales VALUES (1, 'a', 100, '2023-01-10', false), (2, 'b', 50, '2023-01-12', false), (7, 'a', 20, '2023-01-26', true), (8, 'c', 45, '2023-01-28', true);
 ```

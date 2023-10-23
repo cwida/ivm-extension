@@ -10,6 +10,8 @@
 
 namespace duckdb {
 
+enum class IVMType : uint8_t { AGGREGATE_GROUP, SIMPLE_FILTER, SIMPLE_AGGREGATE, SIMPLE_PROJECTION };
+
 struct DoIVMFunctionData : public TableFunctionData {
 	DoIVMFunctionData() {
 	}
