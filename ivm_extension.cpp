@@ -303,12 +303,37 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	}
 
 	case IVMType::SIMPLE_AGGREGATE: {
-		// this is the case of SELECT COUNT(*) without aggregation columns
+		// this is the case of SELECT COUNT(*) / SUM(column) without aggregation columns
 		// we need to rewrite the query as a sum/difference of the multiplicity column
+		/*
+		UPDATE product_sales
+		SET total_amount = total_amount - (
+		SELECT amount
+		FROM delta_product_sales
+		WHERE _duckdb_ivm_multiplicity = false
+		) + (
+		SELECT amount
+		FROM delta_product_sales
+		WHERE _duckdb_ivm_multiplicity = true);
+		*/
 		string ivm_query = "INSERT INTO delta_" + view_name + " SELECT * from DoIVM('" + view_catalog_name + "','" +
 		                   view_schema_name + "','" + view_name + "');";
+		string update_query = "update " + view_name + " set ";
+		// there should be only one column here
+		for (auto &column : column_names) {
+			if (column != "_duckdb_ivm_multiplicity") { // we don't need the multiplicity column
+				update_query += column + " = " + column + " - (select " + column + " from delta_" + view_name +
+				                " where _duckdb_ivm_multiplicity = false) + (select " + column + " from delta_" +
+				                view_name + " where _duckdb_ivm_multiplicity = true);";
+			}
+		}
 		string select_query = "SELECT * FROM delta_" + view_name + ";";
-		return ivm_query + select_query;
+		// return ivm_query + select_query;
+		string delete_view_query = "DELETE FROM delta_" + view_name + ";";
+		// string select_query = "SELECT * FROM delta_" + view_name + ";";
+		// return ivm_query + select_query;
+		string test = "SELECT * FROM " + view_name + ";";
+		return ivm_query + update_query + delete_view_query + test;
 	}
 	}
 }
