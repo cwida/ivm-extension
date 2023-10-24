@@ -44,9 +44,9 @@ public:
 
 	static ParserExtensionParseResult IVMParseFunction(ParserExtensionInfo *info, const string &query);
 	static ParserExtensionPlanResult IVMPlanFunction(ParserExtensionInfo *info, ClientContext &context,
-	unique_ptr<ParserExtensionParseData> parse_data);
+	                                                 unique_ptr<ParserExtensionParseData> parse_data);
 
-	static void IVMWrite(const string& filename, bool append, const string& compiled_query);
+	static void IVMWrite(const string &filename, bool append, const string &compiled_query);
 };
 
 BoundStatement IVMBind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
@@ -87,7 +87,6 @@ public:
 
 	unique_ptr<ParserExtensionParseData> parse_data;
 };
-
 
 class IVMFunction : public TableFunction {
 public:

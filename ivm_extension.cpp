@@ -33,7 +33,6 @@ struct DoIVMData : public GlobalTableFunctionState {
 	idx_t offset;
 	string view_name;
 	// string view_string;
-
 };
 
 unique_ptr<GlobalTableFunctionState> DoIVMInit(ClientContext &context, TableFunctionInitInput &input) {
@@ -117,7 +116,6 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 	auto delta_view_catalog_entry =
 	    catalog.GetEntry(context, CatalogType::TABLE_ENTRY, view_catalog_name, view_schema_name, "delta_" + view_name,
 	                     OnEntryNotFound::THROW_EXCEPTION, error_context);
-	// todo this will break if there is no aggregation
 	auto index_delta_view_catalog_entry =
 	    catalog.GetEntry(context, CatalogType::INDEX_ENTRY, view_catalog_name, view_schema_name,
 	                     "delta_" + view_name + "_ivm_index", OnEntryNotFound::RETURN_NULL, error_context);
@@ -134,15 +132,16 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 
 	// note: joins are hash joins by default, with group hash (try forcing index joins?)
 
+	// first of all we need to understand the keys
+	auto delta_view_entry = dynamic_cast<TableCatalogEntry *>(delta_view_catalog_entry.get());
+	// compiler is too stupid to figure out "auto" here
+	const ColumnList &delta_view_columns = delta_view_entry->GetColumns();
+
+	auto column_names = delta_view_columns.GetColumnNames();
+
 	switch (view_query_type) {
 	case IVMType::AGGREGATE_GROUP: {
 		// let's construct the query step by step
-		// first of all we need to understand the keys
-		auto delta_view_entry = dynamic_cast<TableCatalogEntry *>(delta_view_catalog_entry.get());
-		// compiler is too stupid to figure out "auto" here
-		const ColumnList &delta_view_columns = delta_view_entry->GetColumns();
-
-		auto column_names = delta_view_columns.GetColumnNames();
 		auto index_catalog_entry = dynamic_cast<IndexCatalogEntry *>(index_delta_view_catalog_entry.get());
 		auto key_ids = dynamic_cast<ART *>(index_catalog_entry->index.get())->column_ids;
 
@@ -265,20 +264,52 @@ string UpsertDeltaQueries(ClientContext &context, const FunctionParameters &para
 		// string query = ivm_query + select_query + upsert_query + delete_view_query + test;
 		string query = ivm_query + upsert_query + delete_view_query + test;
 		return query;
-	} break;
-	case IVMType::SIMPLE_FILTER: {
+	}
+
+	case IVMType::SIMPLE_FILTER:
+	case IVMType::SIMPLE_PROJECTION: {
+		// todo test with multiple insertions and deletions of the same row (updates)
 		// we handle filters by performing a union
 		// rewrite the query as union of the true multiplicity and difference of the false ones
-		// todo tomorrow
+		// we start with the difference
+		string delete_query =
+		    "delete from " + view_name + " where exists (select 1 from delta_" + view_name + " where ";
+		// we can't just do SELECT * since the multiplicity column does not exist
+		string select_columns;
+		// we need to add the keys
+		for (auto &column : column_names) {
+			if (column != "_duckdb_ivm_multiplicity") { // we don't need the multiplicity column
+				delete_query += view_name + "." + column + " = delta_" + view_name + "." + column + " and ";
+				select_columns += column + ", ";
+			}
+		}
+		// set multiplicity to false
+		delete_query += "_duckdb_ivm_multiplicity = false);\n";
+		// erase the last comma and space from the column list
+		select_columns.erase(select_columns.size() - 2, 2);
+
+		// now we insert as well
+		string insert_query = "insert into " + view_name + " select " + select_columns + " from delta_" + view_name +
+		                      " where _duckdb_ivm_multiplicity = true;\n";
+
+		string ivm_query = "INSERT INTO delta_" + view_name + " SELECT * from DoIVM('" + view_catalog_name + "','" +
+		                   view_schema_name + "','" + view_name + "');";
+		string delete_view_query = "DELETE FROM delta_" + view_name + ";";
+		// string select_query = "SELECT * FROM delta_" + view_name + ";";
+		// return ivm_query + select_query;
+		string test = "SELECT * FROM " + view_name + ";";
+		return ivm_query + delete_query + insert_query + delete_view_query + test;
+		// return delete_query + insert_query + delete_view_query + test;
+	}
+
+	case IVMType::SIMPLE_AGGREGATE: {
+		// this is the case of SELECT COUNT(*) without aggregation columns
+		// we need to rewrite the query as a sum/difference of the multiplicity column
 		string ivm_query = "INSERT INTO delta_" + view_name + " SELECT * from DoIVM('" + view_catalog_name + "','" +
 		                   view_schema_name + "','" + view_name + "');";
 		string select_query = "SELECT * FROM delta_" + view_name + ";";
 		return ivm_query + select_query;
-	} break;
-	case IVMType::SIMPLE_AGGREGATE:
-		break;
-	case IVMType::SIMPLE_PROJECTION:
-		break;
+	}
 	}
 }
 

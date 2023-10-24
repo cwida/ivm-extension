@@ -135,7 +135,7 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	} else if (found_filter && !found_aggregation) {
 		// SELECT stuff FROM table WHERE condition;
 		ivm_type = IVMType::SIMPLE_FILTER;
- 	} else if (found_projection && !found_aggregation && !found_filter) {
+	} else if (found_projection && !found_aggregation && !found_filter) {
 		// SELECT stuff FROM table;
 		ivm_type = IVMType::SIMPLE_PROJECTION;
 	} else {
@@ -145,7 +145,8 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	con.Rollback();
 
 	// we create the lookup tables for views -> materialized_view_name | sql_string | type | plan
-	auto system_table = "create table if not exists _duckdb_ivm_views (view_name varchar primary key, sql_string varchar, type tinyint, plan varchar);\n";
+	auto system_table = "create table if not exists _duckdb_ivm_views (view_name varchar primary key, sql_string "
+	                    "varchar, type tinyint, plan varchar);\n";
 	con.BeginTransaction();
 	con.Query(system_table);
 	con.Commit();
@@ -166,13 +167,14 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	// todo this does not work because of special characters
 	// todo also write this (and system table ddl) to file
 	// else we just store the query and re-plan it each time or store the json
-	//auto x = escapeSingleQuotes(serialized_plan);
-	//auto test = "create table if not exists test (plan varchar);\n";
-	//con.Query(test);
-	//auto res = con.Query("insert into test values('" + x + "');\n");
+	// auto x = escapeSingleQuotes(serialized_plan);
+	// auto test = "create table if not exists test (plan varchar);\n";
+	// con.Query(test);
+	// auto res = con.Query("insert into test values('" + x + "');\n");
 
 	auto test = "abc";
-	auto ivm_table_insert = "insert or replace into _duckdb_ivm_views values ('" + view_name + "', '" + escapeSingleQuotes(view_query) + "', " + to_string((int)ivm_type) + ", '" + test + "');\n";
+	auto ivm_table_insert = "insert or replace into _duckdb_ivm_views values ('" + view_name + "', '" +
+	                        escapeSingleQuotes(view_query) + "', " + to_string((int)ivm_type) + ", '" + test + "');\n";
 	con.BeginTransaction();
 	auto res = con.Query(ivm_table_insert);
 	con.Commit();
@@ -192,8 +194,8 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 		// todo schema?
 		// todo also add the view name here (there can be multiple views?)
 		// todo exception handling
-		auto delta_table =
-		    "create table if not exists delta_" + table_name + " as select *, true as _duckdb_ivm_multiplicity from " + table_name + " limit 0;\n";
+		auto delta_table = "create table if not exists delta_" + table_name +
+		                   " as select *, true as _duckdb_ivm_multiplicity from " + table_name + " limit 0;\n";
 		con.BeginTransaction();
 		con.Query(delta_table);
 		con.Commit();
@@ -211,8 +213,8 @@ ParserExtensionPlanResult IVMParserExtension::IVMPlanFunction(ParserExtensionInf
 	IVMWrite(compiled_file_path, true, view);
 
 	// now we create the delta table for the result (to store the IVM algorithm output)
-	string delta_view =
-	    "create table if not exists delta_" + view_name + " as select *, true as _duckdb_ivm_multiplicity from " + view_name + " limit 0;\n";
+	string delta_view = "create table if not exists delta_" + view_name +
+	                    " as select *, true as _duckdb_ivm_multiplicity from " + view_name + " limit 0;\n";
 	con.BeginTransaction();
 	con.Query(delta_view);
 	con.Commit();
